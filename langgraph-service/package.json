@@ -8,7 +8,11 @@
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "ingest": "tsx src/ingest-documents.ts",
+    "ingest:file": "tsx src/ingest-documents.ts file",
+    "ingest:dir": "tsx src/ingest-documents.ts dir",
+    "ingest:search": "tsx src/ingest-documents.ts search"
   },
   "dependencies": {
     "@langchain/community": "^1.1.2",
@@ -18,6 +22,8 @@
     "@modelcontextprotocol/sdk": "^1.0.4",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "langchain": "^1.2.6",
+    "pdf-parse": "^1.1.1",
     "pg": "^8.13.1",
     "pgvector": "^0.2.0",
     "zod": "^3.24.1"
@@ -25,6 +31,7 @@
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.5",
+    "@types/pdf-parse": "^1.1.5",
     "@types/pg": "^8.11.10",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

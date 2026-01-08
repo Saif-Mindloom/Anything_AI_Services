@@ -1,7 +1,7 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { PGVectorStore } from "@langchain/community/vectorstores/pgvector";
 import { OpenAIEmbeddings } from "@langchain/openai";
-import { PoolConfig } from "pg";
+import { PoolConfig, Pool } from "pg";
 import { config } from "./config.js";
 
 /**
@@ -11,6 +11,7 @@ import { config } from "./config.js";
 export class RAGSystem {
   private vectorStore: PGVectorStore | null = null;
   private embeddings: OpenAIEmbeddings;
+  private pool: Pool | null = null;
 
   constructor() {
     this.embeddings = new OpenAIEmbeddings({
@@ -29,9 +30,16 @@ export class RAGSystem {
         password: config.postgres.password,
       };
 
-      // Initialize vector store
-      this.vectorStore = await PGVectorStore.initialize(this.embeddings, {
-        postgresConnectionOptions: pgConfig,
+      // Create pool manually
+      this.pool = new Pool(pgConfig);
+
+      // Test connection
+      const client = await this.pool.connect();
+      client.release();
+
+      // Create vector store with existing pool (won't try to create extension)
+      this.vectorStore = new PGVectorStore(this.embeddings, {
+        pool: this.pool,
         tableName: "documents_pg",
         columns: {
           idColumnName: "id",
