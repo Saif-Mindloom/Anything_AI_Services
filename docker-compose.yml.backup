@@ -1,0 +1,138 @@
+version: '3.8'
+
+services:
+  # Existing services...
+  postgres:
+    image: ankane/pgvector:v0.5.1
+    environment:
+      POSTGRES_DB: anything_backend
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # New: LangGraph Service (MCP client embedded)
+  langgraph-service:
+    build:
+      context: ./langgraph-service
+      dockerfile: Dockerfile
+    environment:
+      - PORT=3002
+      - NODE_ENV=development
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MCP_SERVER_COMMAND=node
+      - MCP_SERVER_ARGS=/mcp-server/dist/index.js
+      - MCP_SERVER_ENABLED=true
+      - RAG_ENABLED=false
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=anything_backend
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - API_KEY=${LANGGRAPH_API_KEY:-dev-api-key-123}
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./mcp-server:/mcp-server:ro
+
+  # Existing backend service (update if needed)
+  backend:
+    build:
+      context: ./anything-be
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      # Database
+      - DB_DIALECT=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=anything_backend
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_SSL=false
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # API Keys - loaded from .env file
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - REMOVE_BG_API_KEY=${REMOVEBG_API_KEY}
+      - PAT=${PAT}
+      # ClarifAI Configuration
+      - USER_ID=clarifai
+      - APP_ID=main
+      - MODEL_ID=apparel-detection
+      - MODEL_VERSION_ID=1ed35c3d176f45d69d2aa7971e6ab9fe
+      - CLASSIFICATION_MODEL_ID=apparel-classification-v2
+      - CLASSIFICATION_MODEL_VERSION_ID=651c5412d53c408fa3b4fe3dcc060be7
+      # JWT
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_change_this}
+      - JWT_EXPIRES_IN=24h
+      # Google Cloud
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-anything-ai-assets}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      # LangGraph Integration
+      - LANGGRAPH_SERVICE_URL=http://langgraph-service:3002
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: anything-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    external: true
+    name: anything-be_postgres_data
+  pgadmin_data:
