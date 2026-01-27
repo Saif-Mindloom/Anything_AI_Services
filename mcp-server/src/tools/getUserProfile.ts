@@ -5,22 +5,27 @@ import { executeQuery } from "../graphql-client.js";
  * Schema for getUserProfile input
  */
 export const GetUserProfileSchema = z.object({
-  userId: z.string().describe("The ID of the user"),
+  userId: z
+    .union([z.string(), z.number()])
+    .transform(Number)
+    .describe("The ID of the user"),
 });
 
 /**
  * GraphQL query for user profile
  */
 const GET_USER_PROFILE_QUERY = `
-  query GetUserById($userId: String!) {
-    getUserById(userId: $userId) {
-      id
+  query GetUserProfileDetailsForMCP($userId: Int!) {
+    getUserProfileDetailsForMCP(userId: $userId) {
+      status
       name
-      email
-      height
-      weight
-      gender
-      profileCompleted
+      age
+      mainLandingImage
+      wardrobeDetails {
+        looksCount
+        maxlimitApparels
+        itemsCount
+      }
     }
   }
 `;
@@ -36,7 +41,7 @@ interface User {
 }
 
 interface GetUserResponse {
-  getUserById: User;
+  getUserProfileDetails: User;
 }
 
 /**
@@ -48,20 +53,20 @@ export async function getUserProfile(
   try {
     const { userId } = args;
 
-    const response = await executeQuery<GetUserResponse>(
-      GET_USER_PROFILE_QUERY,
-      { userId }
-    );
-    const user = response.getUserById;
+    const response = await executeQuery<any>(GET_USER_PROFILE_QUERY, {
+      userId,
+    });
 
-    if (!user) {
+    const profileData = response.getUserProfileDetailsForMCP;
+
+    if (!profileData) {
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify({
               success: false,
-              error: `User ${userId} not found`,
+              error: "Unable to retrieve user profile",
             }),
           },
         ],
@@ -76,8 +81,14 @@ export async function getUserProfile(
           text: JSON.stringify(
             {
               success: true,
-              user,
-              message: `Retrieved profile for user ${userId}`,
+              user: {
+                name: profileData.name,
+                age: profileData.age,
+                wardrobeCount: profileData.wardrobeDetails?.itemsCount || 0,
+                looksCount: profileData.wardrobeDetails?.looksCount || 0,
+                maxApparels: profileData.wardrobeDetails?.maxlimitApparels || 0,
+              },
+              message: `Retrieved profile for user: ${profileData.name}`,
             },
             null,
             2

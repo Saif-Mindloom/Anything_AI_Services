@@ -131,8 +131,23 @@ export class SupervisorAgent {
     // Decision logic
     let nextStep: "mcp" | "rag" | "both" | "respond" = "respond";
 
-    // Check if we need MCP (user data queries)
+    // Check for outfit recommendation queries (should I wear, what to wear, suggest outfit)
+    const isOutfitRecommendation =
+      userQuery.includes("what should i wear") ||
+      userQuery.includes("what to wear") ||
+      userQuery.includes("recommend outfit") ||
+      userQuery.includes("suggest outfit") ||
+      userQuery.includes("outfit for") ||
+      userQuery.includes("should i wear") ||
+      (userQuery.includes("wear") &&
+        (userQuery.includes("tomorrow") ||
+          userQuery.includes("today") ||
+          userQuery.includes("tonight") ||
+          userQuery.includes("this evening")));
+
+    // Check if we need MCP (user data queries, weather, occasions)
     const needsMCP =
+      isOutfitRecommendation || // Outfit recommendations always need user data
       userQuery.includes("wardrobe") ||
       userQuery.includes("apparel") ||
       userQuery.includes("outfit") ||
@@ -141,10 +156,22 @@ export class SupervisorAgent {
       userQuery.includes("alternative") ||
       userQuery.includes("low rating") ||
       userQuery.includes("my clothes") ||
+      userQuery.includes("weather") ||
+      userQuery.includes("forecast") ||
+      userQuery.includes("temperature") ||
+      userQuery.includes("rain") ||
+      userQuery.includes("occasion") ||
+      userQuery.includes("holiday") ||
+      userQuery.includes("festival") ||
+      userQuery.includes("diwali") ||
+      userQuery.includes("eid") ||
+      userQuery.includes("christmas") ||
+      userQuery.includes("holi") ||
       (state.rating !== undefined && state.rating < 7);
 
     // Check if we need RAG (fashion knowledge queries)
     const needsRAG =
+      isOutfitRecommendation || // Outfit recommendations benefit from fashion knowledge
       userQuery.includes("style") ||
       userQuery.includes("fashion") ||
       userQuery.includes("occasion") ||
@@ -156,7 +183,7 @@ export class SupervisorAgent {
       userQuery.includes("advice");
 
     console.log("🔍 Analysis - needsMCP:", needsMCP, "needsRAG:", needsRAG);
-    
+
     if (needsMCP && needsRAG) {
       nextStep = "both";
     } else if (needsMCP) {
@@ -179,17 +206,21 @@ export class SupervisorAgent {
     console.log("📊 MCP Results present:", !!state.mcpResults);
     console.log("📚 RAG Results present:", !!state.ragResults);
     console.log("🎯 Next step:", state.nextStep);
-    
+
     let decision: string;
     // If nextStep is undefined, we've completed a task and should respond
     if (!state.nextStep) {
       decision = "respond";
-    } else if (state.mcpResults && !state.ragResults && state.nextStep === "both") {
+    } else if (
+      state.mcpResults &&
+      !state.ragResults &&
+      state.nextStep === "both"
+    ) {
       decision = "rag";
     } else {
       decision = state.nextStep;
     }
-    
+
     console.log("🔀 Decision:", decision);
     console.log("🔀 === ROUTE DECISION COMPLETE ===\n");
     return decision;
@@ -212,20 +243,53 @@ export class SupervisorAgent {
       const mcpTools = this.mcpClient.getLangChainTools();
       const llmWithTools = this.llm.bindTools(mcpTools);
 
+      // Detect query type for smart tool selection
+      const isOutfitRecommendation =
+        userQuery.toLowerCase().includes("what should i wear") ||
+        userQuery.toLowerCase().includes("what to wear") ||
+        userQuery.toLowerCase().includes("recommend outfit") ||
+        (userQuery.toLowerCase().includes("wear") &&
+          (userQuery.toLowerCase().includes("tomorrow") ||
+            userQuery.toLowerCase().includes("today")));
+
       // Create analysis prompt
       const systemPrompt = `You are a fashion data analyst with access to user wardrobe data.
       
 Available tools:
-- get_user_apparels: Get user's clothing items
-- get_outfit_details: Get specific outfit information
-- get_user_profile: Get user profile
+- get_user_apparels: Get user's clothing items (wardrobe)
+- get_outfit_details: Get specific outfit information  
+- get_user_profile: Get user profile and preferences
 - suggest_apparels: Suggest alternative items to improve outfit
+- get_weather_forecast: Get weather forecast (temperature, conditions, rain probability)
+- get_occasions: Get upcoming holidays/occasions (festivals, special days)
 
 User ID: ${state.userId}
 ${state.outfitId ? `Outfit ID: ${state.outfitId}` : ""}
 ${state.rating ? `Current Rating: ${state.rating}/10` : ""}
 
-Analyze the query and use the appropriate tools to gather relevant user data.
+${
+  isOutfitRecommendation
+    ? `
+CRITICAL: For outfit recommendation queries, you ABSOLUTELY MUST gather wardrobe data:
+
+REQUIRED TOOL CALLS (in this order):
+1. Call get_weather_forecast - REQUIRED to understand weather conditions
+2. Call get_occasions - REQUIRED to check for special events
+3. Call get_user_apparels - REQUIRED to see user's available clothing items
+4. Optionally call get_user_profile - for user preferences
+
+IMPORTANT: You MUST call get_user_apparels regardless of anything else. The user cannot get outfit suggestions without knowing their wardrobe.
+
+After gathering ALL this data, provide personalized suggestions based on:
+- Weather conditions
+- Special occasions/festivals
+- User's actual available clothing items
+- User preferences
+
+The user is asking what to wear TODAY - gather complete context from their actual wardrobe!`
+    : "Analyze the query and use the appropriate tools to gather relevant user data."
+}
+
 Query: ${userQuery}`;
 
       const response = await llmWithTools.invoke([
@@ -235,8 +299,11 @@ Query: ${userQuery}`;
 
       // Execute tool calls if any
       let mcpResults = "No specific user data retrieved.";
-      console.log("🔍 Checking for tool calls:", response.tool_calls?.length || 0);
-      
+      console.log(
+        "🔍 Checking for tool calls:",
+        response.tool_calls?.length || 0
+      );
+
       if (response.tool_calls && response.tool_calls.length > 0) {
         console.log("🛠️  Executing", response.tool_calls.length, "tool(s)");
         const toolResults = await Promise.all(
@@ -265,7 +332,10 @@ Query: ${userQuery}`;
       return { mcpResults, nextStep: undefined };
     } catch (error) {
       console.error("❌ Error in MCP agent:", error);
-      console.error("❌ Error stack:", error instanceof Error ? error.stack : 'N/A');
+      console.error(
+        "❌ Error stack:",
+        error instanceof Error ? error.stack : "N/A"
+      );
       // Return error but clear nextStep to prevent infinite loop
       return { mcpResults: `Error: ${error}`, nextStep: undefined };
     }
@@ -307,10 +377,20 @@ Query: ${userQuery}`;
       console.log("📦 State keys:", Object.keys(state));
       console.log("📊 MCP Results present:", !!state.mcpResults);
       console.log("📚 RAG Results present:", !!state.ragResults);
-      
+
       const userQuery =
         state.messages[state.messages.length - 1].content.toString();
       console.log("📝 Query:", userQuery);
+
+      // Detect if this is an outfit recommendation query
+      const isOutfitRecommendation =
+        userQuery.toLowerCase().includes("what should i wear") ||
+        userQuery.toLowerCase().includes("what to wear") ||
+        userQuery.toLowerCase().includes("recommend outfit") ||
+        (userQuery.toLowerCase().includes("wear") &&
+          (userQuery.toLowerCase().includes("tomorrow") ||
+            userQuery.toLowerCase().includes("today") ||
+            userQuery.toLowerCase().includes("tonight")));
 
       // Build context from MCP and RAG results
       let contextParts: string[] = [];
@@ -326,7 +406,7 @@ Query: ${userQuery}`;
       const context = contextParts.join("\n\n---\n\n");
 
       // Create final response prompt
-      const systemPrompt = `You are a fashion AI assistant for Anything AI.
+      const systemPrompt = `You are a fashion AI assistant for Anything AI with VISION capabilities.
 
 ${
   state.includeRating
@@ -334,31 +414,117 @@ ${
     : ""
 }
 
+${
+  state.imageUrl
+    ? `You will receive an IMAGE of the user's current outfit. Analyze the image carefully and describe what you see - colors, fit, style, materials, etc.`
+    : ""
+}
+
 ${context ? `You have access to the following information:\n\n${context}` : ""}
 
-Provide a helpful, personalized response to the user's question. If suggesting alternatives or improvements:
+${
+  userQuery.toLowerCase().includes("describe")
+    ? `
+IMPORTANT: Since the user is asking you to describe the outfit:
+1. First, carefully analyze the IMAGE provided and describe what you see
+2. Then reference the outfit details from the data (outfit components, rating, etc.)
+3. Provide detailed observations about:
+   - Colors and color combinations
+   - Fit and silhouette
+   - Material/fabric appearance
+   - Overall style and vibe
+   - How well the pieces complement each other
+4. Consider the rating (${state.rating}/10) in your analysis
+`
+    : isOutfitRecommendation
+    ? `
+The user is asking for outfit recommendations. Structure your response as follows:
+
+1. **Context Summary** (1-2 lines):
+   - Mention the weather conditions (temperature, rain, etc.)
+   - Note any special occasions or holidays if present
+
+2. **Outfit Recommendation**:
+   - Suggest specific items from their wardrobe (refer to actual apparels by name/description)
+   - Explain how the suggestion fits the weather and occasion
+   - Consider practical factors (comfort, weather-appropriate)
+
+3. **Styling Tips** (brief):
+   - Color coordination or accessory suggestions
+   - Any relevant fashion principles
+
+Keep it conversational, practical, and personalized to their actual wardrobe.
+If wardrobe data is missing, acknowledge it and provide general guidance.
+`
+    : `Provide a helpful, personalized response to the user's question. If suggesting alternatives or improvements:
 1. Reference specific items from their wardrobe (if available)
 2. Explain WHY the suggestions would improve the outfit
 3. Cite fashion principles when applicable
-4. Be encouraging and constructive
+4. Be encouraging and constructive`
+}
 
 Keep responses clear, practical, and concise.`;
 
       console.log("🤖 Invoking LLM for final response...");
-      const response = await this.llm.invoke([
-        new SystemMessage(systemPrompt),
-        ...state.messages,
-      ]);
+
+      // Build messages with image support for vision
+      const messages: any[] = [new SystemMessage(systemPrompt)];
+
+      // Add user message with image if available
+      if (state.imageUrl) {
+        console.log("📸 Adding image URL for vision analysis:", state.imageUrl);
+        console.log(
+          "🔍 Image URL is publicly accessible, GPT-4o should be able to fetch it"
+        );
+
+        const humanMessageContent = [
+          {
+            type: "text",
+            text: userQuery,
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: state.imageUrl,
+              detail: "high", // Request high detail for better analysis
+            },
+          },
+        ];
+
+        console.log(
+          "📦 Vision message content:",
+          JSON.stringify(humanMessageContent, null, 2)
+        );
+
+        messages.push(
+          new HumanMessage({
+            content: humanMessageContent,
+          })
+        );
+      } else {
+        console.log("⚠️ No image URL provided, using text-only mode");
+        // Regular text message if no image
+        messages.push(...state.messages);
+      }
+
+      console.log("🚀 Sending to GPT-4o with", messages.length, "messages");
+      const response = await this.llm.invoke(messages);
 
       const finalResponse = response.content.toString();
       console.log("✅ Final response generated, length:", finalResponse.length);
-      console.log("📝 Final response preview:", finalResponse.substring(0, 100));
+      console.log(
+        "📝 Final response preview:",
+        finalResponse.substring(0, 100)
+      );
       console.log("💬 === RESPONDER NODE COMPLETE ===\n");
 
       return { finalResponse };
     } catch (error) {
       console.error("❌ Error in responder:", error);
-      console.error("❌ Error stack:", error instanceof Error ? error.stack : 'N/A');
+      console.error(
+        "❌ Error stack:",
+        error instanceof Error ? error.stack : "N/A"
+      );
       return {
         finalResponse: `I apologize, but I encountered an error: ${error}`,
       };
@@ -379,7 +545,7 @@ Keep responses clear, practical, and concise.`;
     try {
       console.log("\n🎬 ===== STARTING PROCESS MESSAGE =====");
       console.log("📥 Input:", JSON.stringify(input, null, 2));
-      
+
       const initialState: Partial<AgentStateType> = {
         messages: [new HumanMessage(input.message)],
         userId: input.userId,
@@ -391,7 +557,7 @@ Keep responses clear, practical, and concise.`;
 
       console.log("📦 Initial state prepared");
       console.log("🚀 Invoking graph...");
-      
+
       // Run the graph
       const result = await this.graph.invoke(initialState);
 
@@ -409,7 +575,10 @@ Keep responses clear, practical, and concise.`;
     } catch (error) {
       console.error("\n❌ ===== ERROR IN PROCESS MESSAGE =====");
       console.error("❌ Error:", error);
-      console.error("❌ Error stack:", error instanceof Error ? error.stack : 'N/A');
+      console.error(
+        "❌ Error stack:",
+        error instanceof Error ? error.stack : "N/A"
+      );
       console.error("❌ =======================================\n");
       throw error;
     }

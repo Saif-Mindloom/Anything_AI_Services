@@ -5,7 +5,10 @@ import { executeQuery } from "../graphql-client.js";
  * Schema for getUserApparels input
  */
 export const GetUserApparelsSchema = z.object({
-  userId: z.string().describe("The ID of the user"),
+  userId: z
+    .union([z.string(), z.number()])
+    .transform(String)
+    .describe("The ID of the user"),
   category: z
     .string()
     .optional()

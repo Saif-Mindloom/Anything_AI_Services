@@ -5,7 +5,10 @@ import { executeQuery } from "../graphql-client.js";
  * Schema for suggestApparels input
  */
 export const SuggestApparelsSchema = z.object({
-  userId: z.string().describe("The ID of the user"),
+  userId: z
+    .union([z.string(), z.number()])
+    .transform(String)
+    .describe("The ID of the user"),
   outfitId: z.number().describe("The outfit ID to suggest improvements for"),
   targetCategory: z
     .string()
@@ -21,8 +24,8 @@ export const SuggestApparelsSchema = z.object({
  * GraphQL queries
  */
 const GET_OUTFIT_QUERY = `
-  query GetOutfitById($outfitId: Int!, $userId: String!) {
-    getOutfitById(outfitId: $outfitId, userId: $userId) {
+  query GetOutfitDetails($outfitId: Int!, $userId: String!) {
+    getOutfitDetails(outfitId: $outfitId, userId: $userId) {
       id
       outfitUid
       topId

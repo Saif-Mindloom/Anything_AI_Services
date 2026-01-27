@@ -21,6 +21,11 @@ import {
   suggestApparels,
   SuggestApparelsSchema,
 } from "./tools/suggestApparels.js";
+import {
+  getWeatherForecast,
+  GetWeatherForecastSchema,
+} from "./tools/getWeatherForecast.js";
+import { getOccasions, GetOccasionsSchema } from "./tools/getOccasions.js";
 
 /**
  * MCP Server for Anything AI Backend
@@ -161,6 +166,49 @@ class AnythingAIMCPServer {
               required: ["userId", "outfitId", "targetCategory"],
             },
           },
+          {
+            name: "get_weather_forecast",
+            description:
+              "Get weather forecast for the current week (up to 7 days). Provides temperature, weather conditions, and precipitation probability. Use this to help users choose weather-appropriate outfits and plan their wardrobe for the week.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                location: {
+                  type: "string",
+                  description:
+                    "Location for weather forecast (e.g., 'Mumbai, India', 'Delhi'). Defaults to 'Mumbai, India' if not specified.",
+                },
+                days: {
+                  type: "number",
+                  description:
+                    "Number of days for forecast (1-7). Defaults to 7 for weekly forecast.",
+                  minimum: 1,
+                  maximum: 7,
+                },
+              },
+            },
+          },
+          {
+            name: "get_occasions",
+            description:
+              "Get information about Indian holidays and special occasions including festivals like Diwali, Eid, Holi, Christmas, etc. Provides details about today's occasion, current week's holidays, and upcoming events. Use this to suggest occasion-appropriate traditional or festive outfits.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                includeUpcoming: {
+                  type: "boolean",
+                  description:
+                    "Whether to include upcoming occasions (next 30 days). Defaults to true.",
+                },
+                religion: {
+                  type: "string",
+                  description:
+                    "Filter occasions by religion: 'hindu', 'muslim', 'christian', 'sikh', or 'all'.",
+                  enum: ["hindu", "muslim", "christian", "sikh", "all"],
+                },
+              },
+            },
+          },
         ],
       };
     });
@@ -191,6 +239,32 @@ class AnythingAIMCPServer {
           case "suggest_apparels": {
             const validatedArgs = SuggestApparelsSchema.parse(args);
             return await suggestApparels(validatedArgs);
+          }
+
+          case "get_weather_forecast": {
+            const validatedArgs = GetWeatherForecastSchema.parse(args);
+            const result = await getWeatherForecast(validatedArgs);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: result,
+                },
+              ],
+            };
+          }
+
+          case "get_occasions": {
+            const validatedArgs = GetOccasionsSchema.parse(args);
+            const result = await getOccasions(validatedArgs);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: result,
+                },
+              ],
+            };
           }
 
           default:

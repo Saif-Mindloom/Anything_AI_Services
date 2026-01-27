@@ -47,7 +47,7 @@ services:
       - POSTGRES_DB=anything_backend
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - API_KEY=${LANGGRAPH_API_KEY:-dev-api-key-123}
+      - API_KEY=${API_KEY}
     ports:
       - "3002:3002"
     depends_on:

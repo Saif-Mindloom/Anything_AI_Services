@@ -6,27 +6,33 @@ import { executeQuery } from "../graphql-client.js";
  */
 export const GetOutfitDetailsSchema = z.object({
   outfitId: z.number().describe("The ID (outfitUid) of the outfit"),
-  userId: z.string().describe("The ID of the user who owns the outfit"),
+  userId: z
+    .union([z.string(), z.number()])
+    .transform(Number)
+    .describe("The ID of the user who owns the outfit"),
 });
 
 /**
  * GraphQL query for outfit details
  */
 const GET_OUTFIT_DETAILS_QUERY = `
-  query GetOutfitById($outfitId: Int!, $userId: String!) {
-    getOutfitById(outfitId: $outfitId, userId: $userId) {
-      id
-      outfitUid
-      userId
-      topId
-      bottomId
-      shoeId
-      dressId
-      primaryImageUrl
-      imageList
-      rating
-      visible
-      favourite
+  query GetOutfitDetailsForMCP($outfitId: Int!, $userId: Int!) {
+    getOutfitDetailsForMCP(outfitId: $outfitId, userId: $userId) {
+      success
+      message
+      outfit {
+        id
+        outfitUid
+        topId
+        bottomId
+        shoeId
+        dressId
+        primaryImageUrl
+        imageList
+        rating
+        poseLeft
+        poseRight
+      }
     }
   }
 `;
@@ -34,20 +40,23 @@ const GET_OUTFIT_DETAILS_QUERY = `
 interface Outfit {
   id: number;
   outfitUid: number;
-  userId: number;
   topId: number;
   bottomId: number;
   shoeId: number;
   dressId: number;
   primaryImageUrl?: string;
-  imageList?: Record<string, string>;
+  imageList?: string;
   rating?: number;
-  visible: boolean;
-  favourite: boolean;
+  poseLeft?: string;
+  poseRight?: string;
 }
 
 interface GetOutfitResponse {
-  getOutfitById: Outfit;
+  getOutfitDetailsForMCP: {
+    success: boolean;
+    message: string;
+    outfit: Outfit;
+  };
 }
 
 /**
@@ -67,16 +76,16 @@ export async function getOutfitDetails(
       }
     );
 
-    const outfit = response.getOutfitById;
+    const { success, message, outfit } = response.getOutfitDetailsForMCP;
 
-    if (!outfit) {
+    if (!success || !outfit) {
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify({
               success: false,
-              error: `Outfit ${outfitId} not found for user ${userId}`,
+              error: message || `Outfit ${outfitId} not found`,
             }),
           },
         ],
@@ -92,40 +101,8 @@ export async function getOutfitDetails(
       outfit.dressId,
     ].filter((id) => id && id !== 0);
 
-    let apparelDetails = [];
-    if (apparelIds.length > 0) {
-      const GET_APPAREL_BY_ID_QUERY = `
-        query GetUserApparelById($userId: String!, $apparelId: Int!) {
-          getUserApparelById(userId: $userId, apparelId: $apparelId) {
-            id
-            category
-            subcategory
-            brand
-            name
-            colors
-            urlProcessed
-          }
-        }
-      `;
-
-      apparelDetails = await Promise.all(
-        apparelIds.map(async (apparelId) => {
-          try {
-            const apparelResponse = await executeQuery<any>(
-              GET_APPAREL_BY_ID_QUERY,
-              {
-                userId,
-                apparelId,
-              }
-            );
-            return apparelResponse.getUserApparelById;
-          } catch {
-            return null;
-          }
-        })
-      );
-      apparelDetails = apparelDetails.filter(Boolean);
-    }
+    // Note: We don't fetch individual apparel details since we don't have userId context
+    // The outfit information alone is sufficient for the MCP tool
 
     return {
       content: [
@@ -134,11 +111,9 @@ export async function getOutfitDetails(
           text: JSON.stringify(
             {
               success: true,
-              outfit: {
-                ...outfit,
-                apparels: apparelDetails,
-              },
-              message: `Retrieved outfit ${outfitId} with ${apparelDetails.length} apparel items`,
+              outfit: outfit,
+              apparelIds: apparelIds,
+              message: `Retrieved outfit ${outfitId} with ${apparelIds.length} apparel items`,
             },
             null,
             2

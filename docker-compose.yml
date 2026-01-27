@@ -49,6 +49,7 @@ services:
       - POSTGRES_PASSWORD=postgres
       - API_KEY=${API_KEY}
       - BACKEND_GRAPHQL_URL=http://backend:4000/graphql
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
     ports:
       - "3002:3002"
     depends_on:
@@ -98,10 +99,14 @@ services:
       - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-anything-ai-assets}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
       # LangGraph Integration
       - LANGGRAPH_SERVICE_URL=http://langgraph-service:3002
+      - LANGGRAPH_API_KEY=${LANGGRAPH_API_KEY:-langgraph-secret-key-change-in-production}
     ports:
       - "4000:4000"
+    volumes:
+      - ~/.config/gcloud:/root/.config/gcloud:ro
     depends_on:
       postgres:
         condition: service_healthy
