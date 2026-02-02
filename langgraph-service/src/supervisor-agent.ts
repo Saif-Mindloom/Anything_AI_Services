@@ -34,6 +34,13 @@ const AgentState = Annotation.Root({
   imageUrl: Annotation<string | undefined>({
     reducer: (left, right) => right ?? left,
   }),
+  conversationHistory: Annotation<
+    | Array<{ role: "user" | "assistant"; content: string; timestamp: number }>
+    | undefined
+  >({
+    reducer: (left, right) => right ?? left,
+    default: () => [],
+  }),
   nextStep: Annotation<"mcp" | "rag" | "both" | "respond">({
     reducer: (left, right) => right ?? left,
     default: () => "respond" as const,
@@ -112,7 +119,7 @@ export class SupervisorAgent {
    * Supervisor Node - Decides which agent to call
    */
   private async supervisorNode(
-    state: AgentStateType
+    state: AgentStateType,
   ): Promise<Partial<AgentStateType>> {
     console.log("\n🧠 === SUPERVISOR NODE ===");
     const lastMessage = state.messages[state.messages.length - 1];
@@ -124,6 +131,29 @@ export class SupervisorAgent {
     // If we already have results, go to responder
     if (state.mcpResults || state.ragResults) {
       console.log("✅ Results already gathered, routing to responder");
+      console.log("🧠 === SUPERVISOR NODE COMPLETE ===\n");
+      return { nextStep: "respond" };
+    }
+
+    // Check for simple greetings/conversational queries
+    const isGreeting =
+      /^(hi|hey|hello|hola|good morning|good afternoon|good evening|greetings|sup|what's up|whats up|yo)\s*[!.?]*$/i.test(
+        userQuery.trim(),
+      );
+    const isShortConversational =
+      userQuery.trim().length < 30 &&
+      (userQuery.includes("how are you") ||
+        userQuery.includes("how r u") ||
+        userQuery.includes("thank") ||
+        userQuery.includes("cool") ||
+        userQuery.includes("nice") ||
+        userQuery.includes("ok") ||
+        userQuery.includes("okay"));
+
+    if (isGreeting || isShortConversational) {
+      console.log(
+        "✅ Simple greeting/conversational message detected, responding directly",
+      );
       console.log("🧠 === SUPERVISOR NODE COMPLETE ===\n");
       return { nextStep: "respond" };
     }
@@ -230,7 +260,7 @@ export class SupervisorAgent {
    * MCP Agent Node - Queries user data via MCP tools
    */
   private async mcpAgentNode(
-    state: AgentStateType
+    state: AgentStateType,
   ): Promise<Partial<AgentStateType>> {
     try {
       console.log("\n🔧 === MCP AGENT NODE ===");
@@ -301,7 +331,7 @@ Query: ${userQuery}`;
       let mcpResults = "No specific user data retrieved.";
       console.log(
         "🔍 Checking for tool calls:",
-        response.tool_calls?.length || 0
+        response.tool_calls?.length || 0,
       );
 
       if (response.tool_calls && response.tool_calls.length > 0) {
@@ -321,7 +351,7 @@ Query: ${userQuery}`;
               }
             }
             return "";
-          })
+          }),
         );
         mcpResults = toolResults.join("\n\n");
       }
@@ -334,7 +364,7 @@ Query: ${userQuery}`;
       console.error("❌ Error in MCP agent:", error);
       console.error(
         "❌ Error stack:",
-        error instanceof Error ? error.stack : "N/A"
+        error instanceof Error ? error.stack : "N/A",
       );
       // Return error but clear nextStep to prevent infinite loop
       return { mcpResults: `Error: ${error}`, nextStep: undefined };
@@ -345,7 +375,7 @@ Query: ${userQuery}`;
    * RAG Agent Node - Queries fashion knowledge base
    */
   private async ragAgentNode(
-    state: AgentStateType
+    state: AgentStateType,
   ): Promise<Partial<AgentStateType>> {
     try {
       console.log("\n📚 === RAG AGENT NODE ===");
@@ -370,7 +400,7 @@ Query: ${userQuery}`;
    * Responder Node - Generates final response
    */
   private async responderNode(
-    state: AgentStateType
+    state: AgentStateType,
   ): Promise<Partial<AgentStateType>> {
     try {
       console.log("\n💬 === RESPONDER NODE ===");
@@ -405,8 +435,35 @@ Query: ${userQuery}`;
 
       const context = contextParts.join("\n\n---\n\n");
 
+      // Build conversation history context if available
+      let conversationContext = "";
+      if (state.conversationHistory && state.conversationHistory.length > 0) {
+        console.log(
+          `📜 Including ${state.conversationHistory.length} previous messages in context`,
+        );
+        conversationContext = `\n\n🔴 CRITICAL: This is an ONGOING conversation with ${state.conversationHistory.length} previous messages. You MUST reference and recall previous messages when asked. The conversation history is provided in the message sequence above - review it carefully before responding.\n`;
+      }
+
+      // Check if this is a simple greeting/conversational message
+      const isGreeting =
+        /^(hi|hey|hello|hola|good morning|good afternoon|good evening|greetings|sup|what's up|whats up|yo)\s*[!.?]*$/i.test(
+          userQuery.trim(),
+        );
+      const isShortConversational =
+        userQuery.trim().length < 30 &&
+        !context &&
+        (userQuery.toLowerCase().includes("how are you") ||
+          userQuery.toLowerCase().includes("how r u") ||
+          userQuery.toLowerCase().includes("thank") ||
+          userQuery.toLowerCase().includes("cool") ||
+          userQuery.toLowerCase().includes("nice") ||
+          userQuery.toLowerCase().includes("ok") ||
+          userQuery.toLowerCase().includes("okay"));
+
       // Create final response prompt
       const systemPrompt = `You are a fashion AI assistant for Anything AI with VISION capabilities.
+
+${conversationContext}
 
 ${
   state.includeRating
@@ -423,58 +480,106 @@ ${
 ${context ? `You have access to the following information:\n\n${context}` : ""}
 
 ${
-  userQuery.toLowerCase().includes("describe")
+  isGreeting || isShortConversational
     ? `
+The user is greeting you or having casual conversation. Respond naturally and conversationally:
+- Keep it SHORT (1-2 sentences maximum)
+- Be friendly and warm
+- Ask what you can help them with today (outfit suggestions, styling advice, etc.)
+- Do NOT analyze their wardrobe or give unsolicited outfit breakdowns
+- Match their energy and tone
+
+Example responses:
+- "Hi! How can I help style your look today?"
+- "Hey there! What would you like help with - outfit suggestions or styling advice?"
+- "Hello! Ready to find the perfect outfit?"
+`
+    : userQuery.toLowerCase().includes("describe")
+      ? `
 IMPORTANT: Since the user is asking you to describe the outfit:
 1. First, carefully analyze the IMAGE provided and describe what you see
 2. Then reference the outfit details from the data (outfit components, rating, etc.)
-3. Provide detailed observations about:
+3. Provide CONCISE observations about:
    - Colors and color combinations
    - Fit and silhouette
    - Material/fabric appearance
    - Overall style and vibe
    - How well the pieces complement each other
 4. Consider the rating (${state.rating}/10) in your analysis
+5. Keep it BRIEF - 3-4 sentences max, then ask if they want suggestions
 `
-    : isOutfitRecommendation
-    ? `
-The user is asking for outfit recommendations. Structure your response as follows:
+      : isOutfitRecommendation
+        ? `
+The user is asking for outfit recommendations. Keep response CONCISE:
 
-1. **Context Summary** (1-2 lines):
-   - Mention the weather conditions (temperature, rain, etc.)
-   - Note any special occasions or holidays if present
+1. **Context** (1 line only):
+   - Mention weather + occasion if relevant
 
-2. **Outfit Recommendation**:
-   - Suggest specific items from their wardrobe (refer to actual apparels by name/description)
-   - Explain how the suggestion fits the weather and occasion
-   - Consider practical factors (comfort, weather-appropriate)
+2. **Recommendation** (2-3 sentences):
+   - Suggest specific items from their wardrobe
+   - Briefly explain why it works
 
-3. **Styling Tips** (brief):
-   - Color coordination or accessory suggestions
-   - Any relevant fashion principles
+3. **Optional**: Ask if they want more details or alternatives
 
-Keep it conversational, practical, and personalized to their actual wardrobe.
-If wardrobe data is missing, acknowledge it and provide general guidance.
+Be conversational and to-the-point. No long explanations.
 `
-    : `Provide a helpful, personalized response to the user's question. If suggesting alternatives or improvements:
-1. Reference specific items from their wardrobe (if available)
-2. Explain WHY the suggestions would improve the outfit
-3. Cite fashion principles when applicable
-4. Be encouraging and constructive`
+        : `Provide a helpful, personalized response to the user's question.
+
+KEY RULES:
+- Keep responses CONCISE (3-4 sentences max)
+- Get to the point quickly
+- If suggesting alternatives:
+  * Mention 2-3 specific items from their wardrobe
+  * Brief reason why (1 sentence)
+- End with a relevant question if more info is needed
+- Be encouraging but brief`
 }
 
-Keep responses clear, practical, and concise.`;
+${isGreeting || isShortConversational ? "" : "ALWAYS be concise - users prefer shorter, actionable responses over long explanations."}`;
 
       console.log("🤖 Invoking LLM for final response...");
 
       // Build messages with image support for vision
       const messages: any[] = [new SystemMessage(systemPrompt)];
 
-      // Add user message with image if available
-      if (state.imageUrl) {
-        console.log("📸 Adding image URL for vision analysis:", state.imageUrl);
+      // Add conversation history as proper message objects
+      if (state.conversationHistory && state.conversationHistory.length > 0) {
         console.log(
-          "🔍 Image URL is publicly accessible, GPT-4o should be able to fetch it"
+          `💬 Adding ${state.conversationHistory.length} conversation history messages`,
+        );
+        state.conversationHistory.forEach((msg) => {
+          if (msg.role === "user") {
+            messages.push(new HumanMessage(msg.content));
+          } else if (msg.role === "assistant") {
+            messages.push(new AIMessage(msg.content));
+          }
+        });
+      }
+
+      // Determine if vision mode is needed for this query
+      const needsVision =
+        state.imageUrl &&
+        !isGreeting &&
+        !isShortConversational &&
+        // First message in conversation - show the outfit
+        (!state.conversationHistory ||
+          state.conversationHistory.length === 0 ||
+          // Explicitly asking about visual aspects
+          /\b(outfit|look|wear|wearing|color|style|fit|match|coord|describe|show|see|image|photo|picture|this)\b/i.test(
+            userQuery,
+          ) ||
+          // Asking "how is" or "how does"
+          /^how (is|does|do)/i.test(userQuery.trim())) &&
+        // NOT asking about conversation history
+        !/\b(last|previous|earlier|before|said|told|message|conversation|history)\b/i.test(
+          userQuery,
+        );
+
+      // Add user message with image if vision is needed
+      if (needsVision) {
+        console.log(
+          "📸 Vision mode: Adding image URL for analysis:",
+          state.imageUrl,
         );
 
         const humanMessageContent = [
@@ -486,24 +591,27 @@ Keep responses clear, practical, and concise.`;
             type: "image_url",
             image_url: {
               url: state.imageUrl,
-              detail: "high", // Request high detail for better analysis
+              detail: "high",
             },
           },
         ];
 
-        console.log(
-          "📦 Vision message content:",
-          JSON.stringify(humanMessageContent, null, 2)
-        );
-
         messages.push(
           new HumanMessage({
             content: humanMessageContent,
-          })
+          }),
         );
       } else {
-        console.log("⚠️ No image URL provided, using text-only mode");
-        // Regular text message if no image
+        if (isGreeting || isShortConversational) {
+          console.log("👋 Greeting detected - text-only mode");
+        } else if (!state.imageUrl) {
+          console.log("⚠️ No image URL provided - text-only mode");
+        } else {
+          console.log(
+            "💬 Text-only mode - query doesn't require vision (conversation/general question)",
+          );
+        }
+        // Regular text message
         messages.push(...state.messages);
       }
 
@@ -514,7 +622,7 @@ Keep responses clear, practical, and concise.`;
       console.log("✅ Final response generated, length:", finalResponse.length);
       console.log(
         "📝 Final response preview:",
-        finalResponse.substring(0, 100)
+        finalResponse.substring(0, 100),
       );
       console.log("💬 === RESPONDER NODE COMPLETE ===\n");
 
@@ -523,7 +631,7 @@ Keep responses clear, practical, and concise.`;
       console.error("❌ Error in responder:", error);
       console.error(
         "❌ Error stack:",
-        error instanceof Error ? error.stack : "N/A"
+        error instanceof Error ? error.stack : "N/A",
       );
       return {
         finalResponse: `I apologize, but I encountered an error: ${error}`,
@@ -541,6 +649,11 @@ Keep responses clear, practical, and concise.`;
     rating?: number;
     includeRating?: boolean;
     imageUrl?: string;
+    conversationHistory?: Array<{
+      role: "user" | "assistant";
+      content: string;
+      timestamp: number;
+    }>;
   }): Promise<string> {
     try {
       console.log("\n🎬 ===== STARTING PROCESS MESSAGE =====");
@@ -553,6 +666,7 @@ Keep responses clear, practical, and concise.`;
         rating: input.rating,
         includeRating: input.includeRating,
         imageUrl: input.imageUrl,
+        conversationHistory: input.conversationHistory || [],
       };
 
       console.log("📦 Initial state prepared");
@@ -577,7 +691,7 @@ Keep responses clear, practical, and concise.`;
       console.error("❌ Error:", error);
       console.error(
         "❌ Error stack:",
-        error instanceof Error ? error.stack : "N/A"
+        error instanceof Error ? error.stack : "N/A",
       );
       console.error("❌ =======================================\n");
       throw error;

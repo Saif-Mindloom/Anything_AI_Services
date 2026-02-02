@@ -42,8 +42,15 @@ app.get("/health", (req: Request, res: Response) => {
  */
 app.post("/chat", authenticateRequest, async (req: Request, res: Response) => {
   try {
-    const { message, userId, outfitId, rating, includeRating, imageUrl } =
-      req.body;
+    const {
+      message,
+      userId,
+      outfitId,
+      rating,
+      includeRating,
+      imageUrl,
+      conversationHistory,
+    } = req.body;
 
     // Validate required fields
     if (!message || !userId) {
@@ -54,11 +61,17 @@ app.post("/chat", authenticateRequest, async (req: Request, res: Response) => {
 
     console.log(
       `💬 Processing chat for user ${userId}:`,
-      message.substring(0, 100)
+      message.substring(0, 100),
     );
 
+    if (conversationHistory && conversationHistory.length > 0) {
+      console.log(
+        `📚 Conversation history included: ${conversationHistory.length} messages`,
+      );
+    }
+
     console.log("🔄 About to call supervisorAgent.processMessage...");
-    
+
     // Process with supervisor agent
     const response = await supervisorAgent.processMessage({
       message,
@@ -67,6 +80,7 @@ app.post("/chat", authenticateRequest, async (req: Request, res: Response) => {
       rating,
       includeRating,
       imageUrl,
+      conversationHistory,
     });
 
     console.log("✅ supervisorAgent.processMessage completed");
@@ -130,7 +144,7 @@ app.post(
         error: error instanceof Error ? error.message : "Internal server error",
       });
     }
-  }
+  },
 );
 
 /**

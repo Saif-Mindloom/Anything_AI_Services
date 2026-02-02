@@ -32,6 +32,7 @@ const GET_OUTFIT_DETAILS_QUERY = `
         rating
         poseLeft
         poseRight
+        hasAccessories
       }
     }
   }
@@ -49,6 +50,7 @@ interface Outfit {
   rating?: number;
   poseLeft?: string;
   poseRight?: string;
+  hasAccessories: boolean;
 }
 
 interface GetOutfitResponse {
@@ -63,7 +65,7 @@ interface GetOutfitResponse {
  * Get outfit details including all apparel items
  */
 export async function getOutfitDetails(
-  args: z.infer<typeof GetOutfitDetailsSchema>
+  args: z.infer<typeof GetOutfitDetailsSchema>,
 ) {
   try {
     const { outfitId, userId } = args;
@@ -73,7 +75,7 @@ export async function getOutfitDetails(
       {
         outfitId,
         userId,
-      }
+      },
     );
 
     const { success, message, outfit } = response.getOutfitDetailsForMCP;
@@ -116,7 +118,7 @@ export async function getOutfitDetails(
               message: `Retrieved outfit ${outfitId} with ${apparelIds.length} apparel items`,
             },
             null,
-            2
+            2,
           ),
         },
       ],

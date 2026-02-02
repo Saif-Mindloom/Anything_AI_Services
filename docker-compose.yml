@@ -83,7 +83,7 @@ services:
       # API Keys - loaded from .env file
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - REMOVE_BG_API_KEY=${REMOVEBG_API_KEY}
+      - REMOVEBG_API_KEY=${REMOVEBG_API_KEY}
       - PAT=${PAT}
       # ClarifAI Configuration
       - USER_ID=clarifai
@@ -91,7 +91,7 @@ services:
       - MODEL_ID=apparel-detection
       - MODEL_VERSION_ID=1ed35c3d176f45d69d2aa7971e6ab9fe
       - CLASSIFICATION_MODEL_ID=apparel-classification-v2
-      - CLASSIFICATION_MODEL_VERSION_ID=651c5412d53c408fa3b4fe3dcc060be7
+      - CLASSIFICATION_MODEL_VERSION_ID=1ed35c3d176f45d69d2aa7971e6ab9fe
       # JWT
       - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_change_this_in_production}
       - JWT_EXPIRES_IN=24h
@@ -103,10 +103,13 @@ services:
       # LangGraph Integration
       - LANGGRAPH_SERVICE_URL=http://langgraph-service:3002
       - LANGGRAPH_API_KEY=${LANGGRAPH_API_KEY:-langgraph-secret-key-change-in-production}
+      # Debug Options
+      - SAVE_DEBUG_IMAGES=${SAVE_DEBUG_IMAGES:-false}
     ports:
       - "4000:4000"
     volumes:
       - ~/.config/gcloud:/root/.config/gcloud:ro
+      - ./anything-be/generated-images:/app/generated-images
     depends_on:
       postgres:
         condition: service_healthy
