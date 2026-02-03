@@ -142,7 +142,7 @@ def process_image(image: Image.Image) -> Image.Image:
             offset_y = (new_height - height) // 2
             padded_image.paste(image, (offset_x, offset_y))
             model_input_size = (new_width, new_height)
-            model_input_image = padded_image
+            model_input_image = padded_imageʼ
         else:
             model_input_size = (width, height)
             model_input_image = image

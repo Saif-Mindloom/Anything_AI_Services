@@ -33,10 +33,35 @@ const GET_OUTFIT_DETAILS_QUERY = `
         poseLeft
         poseRight
         hasAccessories
+        accessories {
+          id
+          outfitId
+          accessoryType
+          description
+          imageUrl
+          gsUtil
+          status
+          createdAt
+          updatedAt
+        }
       }
     }
   }
 `;
+
+
+
+interface Accessory {
+  id: number;
+  outfitId: number;
+  accessoryType: string;
+  description?: string;
+  imageUrl?: string;
+  gsUtil?: string;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 interface Outfit {
   id: number;
@@ -51,6 +76,7 @@ interface Outfit {
   poseLeft?: string;
   poseRight?: string;
   hasAccessories: boolean;
+  accessories?: Accessory[];
 }
 
 interface GetOutfitResponse {
@@ -62,7 +88,7 @@ interface GetOutfitResponse {
 }
 
 /**
- * Get outfit details including all apparel items
+ * Get outfit details including all apparel items and accessories
  */
 export async function getOutfitDetails(
   args: z.infer<typeof GetOutfitDetailsSchema>,
@@ -103,9 +129,6 @@ export async function getOutfitDetails(
       outfit.dressId,
     ].filter((id) => id && id !== 0);
 
-    // Note: We don't fetch individual apparel details since we don't have userId context
-    // The outfit information alone is sufficient for the MCP tool
-
     return {
       content: [
         {
@@ -115,7 +138,7 @@ export async function getOutfitDetails(
               success: true,
               outfit: outfit,
               apparelIds: apparelIds,
-              message: `Retrieved outfit ${outfitId} with ${apparelIds.length} apparel items`,
+              message: `Retrieved outfit ${outfitId} with ${apparelIds.length} apparel items${outfit.accessories ? ` and ${outfit.accessories.length} accessories` : ""}`,
             },
             null,
             2,
