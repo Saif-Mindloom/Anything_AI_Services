@@ -49,8 +49,6 @@ const GET_OUTFIT_DETAILS_QUERY = `
   }
 `;
 
-
-
 interface Accessory {
   id: number;
   outfitId: number;
