@@ -29,6 +29,43 @@ services:
       timeout: 5s
       retries: 5
 
+  # BiRefNet Background Removal Service
+  birefnet-service:
+    build:
+      context: ./birefnet-service
+      dockerfile: Dockerfile
+    environment:
+      - PORT=8000
+      - BIREFNET_MODEL=zhengpeng7/BiRefNet
+      - DEVICE=cpu
+      - USE_FP16=false
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "-O",
+          "-",
+          "http://localhost:8000/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    # Uncomment if you have NVIDIA GPU
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
   # New: LangGraph Service (MCP client embedded)
   langgraph-service:
     build:
@@ -103,6 +140,9 @@ services:
       # LangGraph Integration
       - LANGGRAPH_SERVICE_URL=http://langgraph-service:3002
       - LANGGRAPH_API_KEY=${LANGGRAPH_API_KEY:-langgraph-secret-key-change-in-production}
+      # BiRefNet Service
+      - USE_BIREFNET=${USE_BIREFNET:-true}
+      - BIREFNET_SERVICE_URL=${BIREFNET_SERVICE_URL:-http://birefnet-service:8000}
       # Debug Options
       - SAVE_DEBUG_IMAGES=${SAVE_DEBUG_IMAGES:-false}
     ports:
@@ -114,6 +154,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      birefnet-service:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:

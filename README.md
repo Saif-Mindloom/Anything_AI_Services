@@ -20,14 +20,15 @@ docker-compose up -d
 
 ## 📚 Documentation
 
-| Document                                                     | Purpose                             |
-| ------------------------------------------------------------ | ----------------------------------- |
-| [**GETTING_STARTED.md**](./GETTING_STARTED.md)               | 🚀 Quick start guide and checklist  |
-| [**IMPLEMENTATION_SUMMARY.md**](./IMPLEMENTATION_SUMMARY.md) | 📋 Complete implementation overview |
-| [**MCP_INTEGRATION_GUIDE.md**](./MCP_INTEGRATION_GUIDE.md)   | 📖 Detailed architecture and setup  |
-| [**N8N_MIGRATION_GUIDE.md**](./N8N_MIGRATION_GUIDE.md)       | 🔄 n8n workflow migration steps     |
-| [**ARCHITECTURE_VISUAL.md**](./ARCHITECTURE_VISUAL.md)       | 🏗️ Visual architecture diagrams     |
-| [**ENV_TEMPLATE.md**](./ENV_TEMPLATE.md)                     | ⚙️ Environment configuration guide  |
+| Document                                                     | Purpose                              |
+| ------------------------------------------------------------ | ------------------------------------ |
+| [**GETTING_STARTED.md**](./GETTING_STARTED.md)               | 🚀 Quick start guide and checklist   |
+| [**IMPLEMENTATION_SUMMARY.md**](./IMPLEMENTATION_SUMMARY.md) | 📋 Complete implementation overview  |
+| [**MCP_INTEGRATION_GUIDE.md**](./MCP_INTEGRATION_GUIDE.md)   | 📖 Detailed architecture and setup   |
+| [**N8N_MIGRATION_GUIDE.md**](./N8N_MIGRATION_GUIDE.md)       | 🔄 n8n workflow migration steps      |
+| [**ARCHITECTURE_VISUAL.md**](./ARCHITECTURE_VISUAL.md)       | 🏗️ Visual architecture diagrams      |
+| [**ENV_TEMPLATE.md**](./ENV_TEMPLATE.md)                     | ⚙️ Environment configuration guide   |
+| [**BIREFNET_QUICKSTART.md**](./BIREFNET_QUICKSTART.md)       | 🎨 BiRefNet background removal setup |
 
 ## 🏗️ Architecture
 
@@ -51,6 +52,7 @@ User → n8n → LangGraph Service → MCP Server → Backend
 | Service    | Port | Purpose                     |
 | ---------- | ---- | --------------------------- |
 | Backend    | 4000 | GraphQL API, business logic |
+| BiRefNet   | 8000 | Background removal (ML)     |
 | MCP Server | 3001 | Data access tools (stdio)   |
 | LangGraph  | 3002 | AI orchestration, REST API  |
 | PostgreSQL | 5432 | Database + vector store     |
