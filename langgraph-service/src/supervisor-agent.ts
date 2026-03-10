@@ -175,9 +175,33 @@ export class SupervisorAgent {
           userQuery.includes("tonight") ||
           userQuery.includes("this evening")));
 
+    // Detect "my [clothing item]" — user is referring to a personal item they own
+    const refersToPersonalItem =
+      /\bmy\b.{0,30}(shirt|tshirt|t-shirt|sweater|jeans|pants|dress|skirt|jacket|coat|hoodie|top|blouse|shorts|suit|shoes|sneakers|boots|heels|bag|hat|scarf|belt|leggings|kurta|saree|salwar|kurti|sweatshirt|cardigan|blazer|trousers|chinos|joggers|item|piece|cloth)/i.test(
+        userQuery,
+      );
+
+    // Detect pairing/matching queries — user wants to combine items
+    const isPairingQuery =
+      userQuery.includes("go well with") ||
+      userQuery.includes("goes well with") ||
+      userQuery.includes("goes with") ||
+      userQuery.includes("go with") ||
+      userQuery.includes("pair with") ||
+      userQuery.includes("pairs with") ||
+      userQuery.includes("match with") ||
+      userQuery.includes("matches with") ||
+      userQuery.includes("combine with") ||
+      userQuery.includes("wear with") ||
+      userQuery.includes("look good with") ||
+      userQuery.includes("looks good with") ||
+      userQuery.includes("complement");
+
     // Check if we need MCP (user data queries, weather, occasions)
     const needsMCP =
       isOutfitRecommendation || // Outfit recommendations always need user data
+      refersToPersonalItem || // User is asking about something they own
+      isPairingQuery || // User wants to pair/match items
       userQuery.includes("wardrobe") ||
       userQuery.includes("apparel") ||
       userQuery.includes("outfit") ||
@@ -510,6 +534,19 @@ ${
 
 ${context ? `You have access to the following information:\n\n${context}` : ""}
 
+CRITICAL RULE — APPLIES TO EVERY RESPONSE:
+Whenever you mention ANY apparel item (clothing, accessory, shoes, etc.), you MUST include ALL of the following, formatted exactly like this:
+
+1. **[Apparel Name]** - [One sentence description or reason]
+   - ID: [exact numeric ID from the data]
+   - [URL](exact image URL from the data)
+
+- The ID and image URL MUST come directly from the USER DATA provided above.
+- NEVER invent, guess, or fabricate item names, IDs, or URLs.
+- NEVER use placeholder or example URLs (e.g., "https://example.com/..." or "https://..." are NOT acceptable).
+- NEVER inline the ID or URL inside a sentence.
+- If the USER DATA section above does not contain real apparel items with actual IDs and image URLs, do NOT suggest any specific items. Instead, let the user know their wardrobe data could not be retrieved and ask them to try again.
+
 ${
   isGreeting || isShortConversational
     ? `
@@ -537,10 +574,7 @@ IMPORTANT: Since the user is asking you to describe the outfit:
    - Overall style and vibe
    - How well the pieces complement each other
 4. Consider the rating (${state.rating}/10) in your analysis
-5. When mentioning specific apparel items from the outfit, include:
-   - The apparel name
-   - The apparel ID (e.g., "ID: 123")
-   - The apparel image URL (e.g., "URL: https://...")
+5. For each apparel item mentioned, use the required structured format (name, ID, URL) from the data
 6. Keep it BRIEF - 3-4 sentences max, then ask if they want suggestions
 `
       : isOutfitRecommendation
@@ -550,13 +584,8 @@ The user is asking for outfit recommendations. Keep response CONCISE:
 1. **Context** (1 line only):
    - Mention weather + occasion if relevant
 
-2. **Recommendation** (2-3 sentences):
-   - Suggest specific items from their wardrobe
-   - Briefly explain why it works
-   - IMPORTANT: When mentioning any apparel from the wardrobe, include:
-     * The apparel name
-     * The apparel ID (e.g., "ID: 123")
-     * The apparel image URL (e.g., "URL: https://...")
+2. **Recommendation**:
+   - Suggest 2-3 specific items from their wardrobe using the required structured format (name, ID, URL)
 
 3. **Optional**: Ask if they want more details or alternatives
 
@@ -567,17 +596,7 @@ Be conversational and to-the-point. No long explanations.
 KEY RULES:
 - Keep responses CONCISE
 - Get to the point quickly
-- If suggesting alternatives or mentioning items from their wardrobe, format EACH item as a numbered list like this:
-
-1. **[Apparel Name]** - [One sentence reason why]
-   - ID: [apparel_id]
-   - [URL](apparel_image_url)
-
-2. **[Apparel Name]** - [One sentence reason why]
-   - ID: [apparel_id]
-   - [URL](apparel_image_url)
-
-NEVER inline the ID or URL inside a sentence. Always use the structured format above.
+- When mentioning any apparel items, use the required structured format (name, ID, URL) for each one
 - End with a relevant question if more info is needed
 - Be encouraging but brief`
 }
