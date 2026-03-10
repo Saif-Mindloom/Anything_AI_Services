@@ -25,7 +25,7 @@ async function getUserEmail(userId: number): Promise<string> {
     // First, create a temporary token to fetch user data
     const tempToken = generateAuthToken(
       userId,
-      `user${userId}@temp.anythingai.app`
+      `user${userId}@temp.anythingai.app`,
     );
     const client = new GraphQLClient(config.backendGraphqlUrl, {
       headers: {
@@ -60,7 +60,6 @@ export function generateAuthToken(userId: number, email?: string): string {
     userId,
     type: "auth",
     iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60, // 24 hours
   };
 
   const secret =
@@ -84,7 +83,7 @@ export const graphqlClient = new GraphQLClient(config.backendGraphqlUrl, {
 export async function executeQuery<T>(
   query: string,
   variables?: Record<string, any>,
-  userId?: number
+  userId?: number,
 ): Promise<T> {
   try {
     // Generate auth token if userId is provided

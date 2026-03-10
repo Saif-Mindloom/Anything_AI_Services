@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import torch
 from transformers import AutoModelForImageSegmentation
-from PIL import Image
+from PIL import Image, ImageOps
 import numpy as np
 import io
 import base64
@@ -116,6 +116,14 @@ def process_image(image: Image.Image) -> Image.Image:
         PIL Image with transparent background
     """
     try:
+        # Apply EXIF orientation correction FIRST
+        # This fixes rotation issues from camera photos
+        try:
+            image = ImageOps.exif_transpose(image)
+            logger.info("Applied EXIF orientation correction")
+        except Exception as e:
+            logger.warning(f"Could not apply EXIF orientation: {e}")
+        
         # Convert to RGB if necessary
         if image.mode != "RGB":
             image = image.convert("RGB")
@@ -142,7 +150,7 @@ def process_image(image: Image.Image) -> Image.Image:
             offset_y = (new_height - height) // 2
             padded_image.paste(image, (offset_x, offset_y))
             model_input_size = (new_width, new_height)
-            model_input_image = padded_imageʼ
+            model_input_image = padded_image
         else:
             model_input_size = (width, height)
             model_input_image = image

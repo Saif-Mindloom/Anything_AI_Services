@@ -5,7 +5,7 @@ import { executeQuery } from "../graphql-client.js";
  * Schema for getOutfitDetails input
  */
 export const GetOutfitDetailsSchema = z.object({
-  outfitId: z.number().describe("The ID (outfitUid) of the outfit"),
+  outfitId: z.number().describe("The ID of the outfit"),
   userId: z
     .union([z.string(), z.number()])
     .transform(Number)
@@ -16,13 +16,12 @@ export const GetOutfitDetailsSchema = z.object({
  * GraphQL query for outfit details
  */
 const GET_OUTFIT_DETAILS_QUERY = `
-  query GetOutfitDetailsForMCP($outfitId: Int!, $userId: Int!) {
+  query GetOutfitDetailsForMCP($outfitId: BigInt!, $userId: Int!) {
     getOutfitDetailsForMCP(outfitId: $outfitId, userId: $userId) {
       success
       message
       outfit {
         id
-        outfitUid
         topId
         bottomId
         shoeId
@@ -63,7 +62,6 @@ interface Accessory {
 
 interface Outfit {
   id: number;
-  outfitUid: number;
   topId: number;
   bottomId: number;
   shoeId: number;

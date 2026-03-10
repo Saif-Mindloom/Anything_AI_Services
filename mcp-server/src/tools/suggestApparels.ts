@@ -27,7 +27,6 @@ const GET_OUTFIT_QUERY = `
   query GetOutfitDetails($outfitId: Int!, $userId: String!) {
     getOutfitDetails(outfitId: $outfitId, userId: $userId) {
       id
-      outfitUid
       topId
       bottomId
       shoeId
@@ -78,7 +77,7 @@ interface Apparel {
  * This tool analyzes the current outfit and suggests replacements from the user's wardrobe
  */
 export async function suggestApparels(
-  args: z.infer<typeof SuggestApparelsSchema>
+  args: z.infer<typeof SuggestApparelsSchema>,
 ) {
   try {
     const { userId, outfitId, targetCategory, currentRating, preferredColors } =
@@ -163,19 +162,19 @@ export async function suggestApparels(
             {
               success: true,
               currentOutfit: {
-                outfitId: outfit.outfitUid,
+                outfitId: outfit.id,
                 currentRating: outfit.rating || currentRating,
                 targetCategory,
                 currentItemId,
               },
               suggestions: suggestions.map(
-                ({ suggestionScore, ...apparel }) => apparel
+                ({ suggestionScore, ...apparel }) => apparel,
               ),
               suggestionsCount: suggestions.length,
               message: suggestionText,
             },
             null,
-            2
+            2,
           ),
         },
       ],

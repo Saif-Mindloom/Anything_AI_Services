@@ -54,9 +54,9 @@ services:
           "http://localhost:8000/health",
         ]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
+      timeout: 15s
+      retries: 5
+      start_period: 300s
     # Uncomment if you have NVIDIA GPU
     # deploy:
     #   resources:
@@ -131,12 +131,12 @@ services:
       - CLASSIFICATION_MODEL_VERSION_ID=1ed35c3d176f45d69d2aa7971e6ab9fe
       # JWT
       - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_change_this_in_production}
-      - JWT_EXPIRES_IN=24h
       # Google Cloud
       - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-anything-ai-assets}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
       - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
       # LangGraph Integration
       - LANGGRAPH_SERVICE_URL=http://langgraph-service:3002
       - LANGGRAPH_API_KEY=${LANGGRAPH_API_KEY:-langgraph-secret-key-change-in-production}
@@ -145,6 +145,12 @@ services:
       - BIREFNET_SERVICE_URL=${BIREFNET_SERVICE_URL:-http://birefnet-service:8000}
       # Debug Options
       - SAVE_DEBUG_IMAGES=${SAVE_DEBUG_IMAGES:-false}
+      # MSG91 Email Configuration
+      - MSG91_EMAIL_AUTH_KEY=${MSG91_EMAIL_AUTH_KEY}
+      - MSG91_EMAIL_FROM_EMAIL=${MSG91_EMAIL_FROM_EMAIL}
+      - MSG91_EMAIL_FROM_NAME=${MSG91_EMAIL_FROM_NAME}
+      - MSG91_EMAIL_DOMAIN=${MSG91_EMAIL_DOMAIN}
+      - MSG91_EMAIL_OTP_TEMPLATE_ID=${MSG91_EMAIL_OTP_TEMPLATE_ID}
     ports:
       - "4000:4000"
     volumes:

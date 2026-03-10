@@ -181,6 +181,8 @@ export class SupervisorAgent {
       userQuery.includes("wardrobe") ||
       userQuery.includes("apparel") ||
       userQuery.includes("outfit") ||
+      userQuery.includes("accessory") ||
+      userQuery.includes("accessories") ||
       userQuery.includes("suggest") ||
       userQuery.includes("improve") ||
       userQuery.includes("alternative") ||
@@ -282,12 +284,21 @@ export class SupervisorAgent {
           (userQuery.toLowerCase().includes("tomorrow") ||
             userQuery.toLowerCase().includes("today")));
 
+      // Detect if query is specifically about accessories
+      const isAccessoryQuery =
+        userQuery.toLowerCase().includes("accessor") ||
+        userQuery.toLowerCase().includes("bag") ||
+        userQuery.toLowerCase().includes("jewelry") ||
+        userQuery.toLowerCase().includes("hat") ||
+        userQuery.toLowerCase().includes("scarf") ||
+        userQuery.toLowerCase().includes("belt");
+
       // Create analysis prompt
       const systemPrompt = `You are a fashion data analyst with access to user wardrobe data.
       
 Available tools:
-- get_user_apparels: Get user's clothing items (wardrobe)
-- get_outfit_details: Get specific outfit information  
+- get_user_apparels: Get user's clothing items (wardrobe). Can filter by category including "accessory"
+- get_outfit_details: Get specific outfit information including AI-generated accessories
 - get_user_profile: Get user profile and preferences
 - suggest_apparels: Suggest alternative items to improve outfit
 - get_weather_forecast: Get weather forecast (temperature, conditions, rain probability)
@@ -296,6 +307,8 @@ Available tools:
 User ID: ${state.userId}
 ${state.outfitId ? `Outfit ID: ${state.outfitId}` : ""}
 ${state.rating ? `Current Rating: ${state.rating}/10` : ""}
+
+${isAccessoryQuery ? `IMPORTANT: User is asking about accessories. Use get_user_apparels with category: "accessory" to retrieve accessory items from their wardrobe.` : ""}
 
 ${
   isOutfitRecommendation
@@ -339,10 +352,28 @@ Query: ${userQuery}`;
         const toolResults = await Promise.all(
           response.tool_calls.map(async (toolCall) => {
             console.log("🔧 Calling tool:", toolCall.name);
+            console.log(
+              "🔧 Tool args:",
+              JSON.stringify(toolCall.args, null, 2),
+            );
+
             const tool = mcpTools.find((t) => t.name === toolCall.name);
             if (tool) {
               try {
-                const result = await tool.invoke(toolCall.args);
+                // Auto-inject userId if not present in the tool call
+                const enhancedArgs = { ...toolCall.args };
+                if (!enhancedArgs.userId && state.userId) {
+                  console.log(
+                    `🔧 Auto-injecting userId: ${state.userId} into tool: ${toolCall.name}`,
+                  );
+                  enhancedArgs.userId = state.userId;
+                }
+
+                console.log(
+                  "🔧 Enhanced args:",
+                  JSON.stringify(enhancedArgs, null, 2),
+                );
+                const result = await tool.invoke(enhancedArgs);
                 console.log("✅ Tool", toolCall.name, "succeeded");
                 return `[${toolCall.name}]\n${result}`;
               } catch (error) {
@@ -506,7 +537,11 @@ IMPORTANT: Since the user is asking you to describe the outfit:
    - Overall style and vibe
    - How well the pieces complement each other
 4. Consider the rating (${state.rating}/10) in your analysis
-5. Keep it BRIEF - 3-4 sentences max, then ask if they want suggestions
+5. When mentioning specific apparel items from the outfit, include:
+   - The apparel name
+   - The apparel ID (e.g., "ID: 123")
+   - The apparel image URL (e.g., "URL: https://...")
+6. Keep it BRIEF - 3-4 sentences max, then ask if they want suggestions
 `
       : isOutfitRecommendation
         ? `
@@ -518,6 +553,10 @@ The user is asking for outfit recommendations. Keep response CONCISE:
 2. **Recommendation** (2-3 sentences):
    - Suggest specific items from their wardrobe
    - Briefly explain why it works
+   - IMPORTANT: When mentioning any apparel from the wardrobe, include:
+     * The apparel name
+     * The apparel ID (e.g., "ID: 123")
+     * The apparel image URL (e.g., "URL: https://...")
 
 3. **Optional**: Ask if they want more details or alternatives
 
@@ -526,11 +565,19 @@ Be conversational and to-the-point. No long explanations.
         : `Provide a helpful, personalized response to the user's question.
 
 KEY RULES:
-- Keep responses CONCISE (3-4 sentences max)
+- Keep responses CONCISE
 - Get to the point quickly
-- If suggesting alternatives:
-  * Mention 2-3 specific items from their wardrobe
-  * Brief reason why (1 sentence)
+- If suggesting alternatives or mentioning items from their wardrobe, format EACH item as a numbered list like this:
+
+1. **[Apparel Name]** - [One sentence reason why]
+   - ID: [apparel_id]
+   - [URL](apparel_image_url)
+
+2. **[Apparel Name]** - [One sentence reason why]
+   - ID: [apparel_id]
+   - [URL](apparel_image_url)
+
+NEVER inline the ID or URL inside a sentence. Always use the structured format above.
 - End with a relevant question if more info is needed
 - Be encouraging but brief`
 }

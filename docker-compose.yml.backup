@@ -92,7 +92,7 @@ services:
       - CLASSIFICATION_MODEL_VERSION_ID=1ed35c3d176f45d69d2aa7971e6ab9fe
       # JWT
       - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_change_this}
-      - JWT_EXPIRES_IN=24h
+
       # Google Cloud
       - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-anything-ai-assets}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}

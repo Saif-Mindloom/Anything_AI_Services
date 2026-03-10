@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test Outfit Composite Generator</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+          Cantarell, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .container {
+        background: white;
+        border-radius: 20px;
+        padding: 40px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 800px;
+        width: 100%;
+      }
+
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+        font-size: 28px;
+      }
+
+      .subtitle {
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 14px;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: #333;
+        font-weight: 600;
+        font-size: 14px;
+      }
+
+      input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 16px;
+        transition: border-color 0.3s;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      button {
+        width: 100%;
+        padding: 14px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
+      }
+
+      button:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .loading {
+        display: none;
+        text-align: center;
+        margin: 20px 0;
+        color: #667eea;
+      }
+
+      .loading.show {
+        display: block;
+      }
+
+      .spinner {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 10px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .result {
+        margin-top: 30px;
+        display: none;
+      }
+
+      .result.show {
+        display: block;
+      }
+
+      .result-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+      }
+
+      .result-title {
+        font-weight: 600;
+        color: #333;
+        font-size: 18px;
+      }
+
+      .success {
+        color: #10b981;
+        font-weight: 600;
+      }
+
+      .error {
+        color: #ef4444;
+        font-weight: 600;
+      }
+
+      .message {
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        font-size: 14px;
+      }
+
+      .message.success {
+        background: #d1fae5;
+        color: #065f46;
+      }
+
+      .message.error {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      .image-container {
+        border: 2px solid #e0e0e0;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #f9fafb;
+      }
+
+      .image-container img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+
+      .no-image {
+        padding: 40px;
+        text-align: center;
+        color: #999;
+      }
+
+      .download-btn {
+        margin-top: 15px;
+        background: #10b981;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      }
+
+      .info-box {
+        background: #eff6ff;
+        border-left: 4px solid #3b82f6;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-size: 13px;
+        color: #1e40af;
+      }
+
+      .info-box ul {
+        margin-left: 20px;
+        margin-top: 8px;
+      }
+
+      .info-box li {
+        margin-bottom: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎨 Test Outfit Composite Generator</h1>
+      <p class="subtitle">
+        Generate a composite image with outfit + accessories using Gemini AI
+      </p>
+
+      <div class="info-box">
+        <strong>ℹ️ Requirements:</strong>
+        <ul>
+          <li>Outfit must have a primary image</li>
+          <li>Outfit must have 2-3 accessories with images</li>
+          <li>No authentication required (test endpoint)</li>
+        </ul>
+      </div>
+
+      <form id="compositeForm">
+        <div class="form-group">
+          <label for="outfitId">Outfit ID</label>
+          <input
+            type="number"
+            id="outfitId"
+            placeholder="Enter outfit ID (e.g., 123)"
+            required
+            min="1"
+          />
+        </div>
+
+        <button type="submit" id="generateBtn">
+          🚀 Generate Composite Image
+        </button>
+      </form>
+
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Generating composite image with Gemini AI...</p>
+        <small>This may take 10-30 seconds</small>
+      </div>
+
+      <div class="result" id="result">
+        <div class="result-header">
+          <span class="result-title">Result:</span>
+          <span id="statusBadge"></span>
+        </div>
+
+        <div class="message" id="message"></div>
+
+        <div class="image-container" id="imageContainer">
+          <div class="no-image">No image to display</div>
+        </div>
+
+        <button class="download-btn" id="downloadBtn" style="display: none">
+          📥 Download Image
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const API_ENDPOINT = "http://localhost:4000/graphql";
+
+      const form = document.getElementById("compositeForm");
+      const loading = document.getElementById("loading");
+      const result = document.getElementById("result");
+      const statusBadge = document.getElementById("statusBadge");
+      const messageBox = document.getElementById("message");
+      const imageContainer = document.getElementById("imageContainer");
+      const downloadBtn = document.getElementById("downloadBtn");
+      const generateBtn = document.getElementById("generateBtn");
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const outfitId = document.getElementById("outfitId").value;
+
+        // Reset UI
+        result.classList.remove("show");
+        loading.classList.add("show");
+        generateBtn.disabled = true;
+        downloadBtn.style.display = "none";
+
+        try {
+          const response = await fetch(API_ENDPOINT, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              query: `
+                            mutation TestGenerateOutfitComposite($outfitId: BigInt!) {
+                                testGenerateOutfitComposite(outfitId: $outfitId) {
+                                    success
+                                    message
+                                    imageUrl
+                                }
+                            }
+                        `,
+              variables: {
+                outfitId: outfitId,
+              },
+            }),
+          });
+
+          const data = await response.json();
+
+          loading.classList.remove("show");
+          result.classList.add("show");
+          generateBtn.disabled = false;
+
+          if (data.errors) {
+            throw new Error(data.errors[0].message);
+          }
+
+          const resultData = data.data.testGenerateOutfitComposite;
+
+          // Update status badge
+          statusBadge.className = resultData.success ? "success" : "error";
+          statusBadge.textContent = resultData.success
+            ? "✓ Success"
+            : "✗ Failed";
+
+          // Update message
+          messageBox.className =
+            "message " + (resultData.success ? "success" : "error");
+          messageBox.textContent = resultData.message;
+
+          // Update image
+          if (resultData.imageUrl) {
+            imageContainer.innerHTML = `<img src="${resultData.imageUrl}" alt="Generated composite">`;
+            downloadBtn.style.display = "block";
+            downloadBtn.onclick = () =>
+              downloadImage(resultData.imageUrl, outfitId);
+          } else {
+            imageContainer.innerHTML =
+              '<div class="no-image">No image generated</div>';
+          }
+        } catch (error) {
+          loading.classList.remove("show");
+          result.classList.add("show");
+          generateBtn.disabled = false;
+
+          statusBadge.className = "error";
+          statusBadge.textContent = "✗ Error";
+          messageBox.className = "message error";
+          messageBox.textContent =
+            error.message || "An unexpected error occurred";
+          imageContainer.innerHTML =
+            '<div class="no-image">No image generated</div>';
+        }
+      });
+
+      function downloadImage(dataUrl, outfitId) {
+        const link = document.createElement("a");
+        link.href = dataUrl;
+        link.download = `outfit-${outfitId}-composite-${Date.now()}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    </script>
+  </body>
+</html>

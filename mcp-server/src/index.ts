@@ -44,7 +44,7 @@ class AnythingAIMCPServer {
         capabilities: {
           tools: {},
         },
-      }
+      },
     );
 
     this.setupHandlers();
@@ -108,7 +108,7 @@ class AnythingAIMCPServer {
               properties: {
                 outfitId: {
                   type: "number",
-                  description: "The ID (outfitUid) of the outfit",
+                  description: "The ID of the outfit",
                 },
                 userId: {
                   type: "string",
