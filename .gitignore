@@ -47,3 +47,6 @@ temp/
 # Production
 .env.production.local
 
+# Backend local env files
+anything-be/.env.docker
+
