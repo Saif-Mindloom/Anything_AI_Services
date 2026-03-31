@@ -1,0 +1,50 @@
+services:
+  app:
+    environment:
+      NODE_ENV: development
+      PORT: ${PORT:-4000}
+      DB_DIALECT: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-anything_backend}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_SSL: false
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_change_this_in_production}
+
+      SMS_API_KEY: ${SMS_API_KEY:-}
+      SMS_SENDER_ID: ${SMS_SENDER_ID:-CDH}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Gemini API Configuration
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      # Remove.bg API Configuration
+      REMOVEBG_API_KEY: ${REMOVEBG_API_KEY}
+      PAT: ${PAT}
+      USER_ID: ${USER_ID}
+      APP_ID: ${APP_ID}
+      MODEL_ID: ${MODEL_ID}
+      MODEL_VERSION_ID: ${MODEL_VERSION_ID}
+      CLASSIFICATION_MODEL_ID: ${CLASSIFICATION_MODEL_ID}
+      CLASSIFICATION_MODEL_VERSION_ID: ${CLASSIFICATION_MODEL_VERSION_ID}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      N8N_RATING_WEBHOOK_URL: ${N8N_RATING_WEBHOOK_URL}
+      N8N_CHAT_WITH_RATING_WEBHOOK_URL: ${N8N_CHAT_WITH_RATING_WEBHOOK_URL}
+      N8N_CHAT_WITHOUT_RATING_WEBHOOK_URL: ${N8N_CHAT_WITHOUT_RATING_WEBHOOK_URL}
+
+    stdin_open: true
+    tty: true
+    # Override the default CMD to use ts-node-dev
+    command:
+      ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    volumes:
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./nodemon.json:/app/nodemon.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./codes:/app/codes:ro
+      - ./generated-images:/app/generated-images
+      # Exclude node_modules to prevent issues
+      - /app/node_modules

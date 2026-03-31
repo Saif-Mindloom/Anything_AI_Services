@@ -1,0 +1,86 @@
+type WeatherForecastItem {
+  date: String!
+  dayOfWeek: String!
+  temperatureMin: Int!
+  temperatureMax: Int!
+  temperatureUnit: String!
+  condition: String!
+  description: String!
+  precipitation: Int
+}
+
+type GetWeatherForecastResult {
+  weatherData: [WeatherForecastItem!]!
+  status: String!
+}
+
+type CalendarItem {
+  date: String!
+  isOccasion: Boolean!
+  outfitId: BigInt
+  outfitUrl: String
+  occasion: String
+  weather: Int
+}
+
+type GetUserCalendarResult {
+  calendarItems: [CalendarItem!]!
+  status: String!
+}
+
+type AddOutfitToCalendarResult {
+  status: String!
+}
+
+type SwapOutfitOnCalendarResult {
+  status: String!
+  message: String!
+}
+
+type DeleteOutfitFromCalendarResult {
+  status: String!
+  message: String!
+}
+
+extend type Query {
+  """
+  Get user's calendar entries.
+  dateFilter can be:
+  - YYYY-MM (e.g., "2025-12") for a specific month
+  - YYYY-MM-DD/YYYY-MM-DD (e.g., "2025-12-01/2026-01-04") for a date range
+  """
+  getUserCalendar(dateFilter: String): GetUserCalendarResult!
+
+  """
+  Get 7-day weather forecast based on GPS coordinates.
+  Returns weather data for the next 7 days starting from today.
+  latitude: User's latitude from GPS (required)
+  longitude: User's longitude from GPS (required)
+  """
+  getWeatherForecast(
+    latitude: Float!
+    longitude: Float!
+  ): GetWeatherForecastResult!
+}
+
+extend type Mutation {
+  addOutfitToCalendar(
+    outfitId: BigInt!
+    date: String!
+  ): AddOutfitToCalendarResult!
+
+  """
+  Swap an outfit on a specific date. Removes whatever outfit is currently on the date and replaces it with the new outfit.
+  Also triggers multiple angle generation for the new outfit.
+  """
+  swapOutfitOnCalendar(
+    oldOutfitId: BigInt
+    newOutfitId: BigInt!
+    date: String!
+  ): SwapOutfitOnCalendarResult!
+
+  """
+  Delete an outfit from a specific calendar date. This removes the outfit assignment from the calendar entry.
+  """
+  deleteOutfitFromCalendar(date: String!): DeleteOutfitFromCalendarResult!
+}

@@ -1,0 +1,159 @@
+type Color {
+  colorname: String!
+  colorvalue: String!
+}
+
+input ColorInput {
+  colorname: String!
+  colorvalue: String!
+}
+
+# Apparel Database Types
+type Apparel {
+  id: Int!
+  userId: Int!
+  category: ApparelCategory!
+  subcategory: ApparelSubcategory!
+  brand: String
+  name: String
+  status: ApparelStatus!
+  description: String
+  material: ApparelMaterial!
+  colors: [Color!]!
+  favorite: Boolean!
+  urlRaw: String
+  urlProcessed: String
+  gsUtilRaw: String
+  gsUtilProcessed: String
+  urlRawBack: String
+  urlProcessedBack: String
+  gsUtilRawBack: String
+  gsUtilProcessedBack: String
+  originalUploadedImageUrl: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+enum ApparelCategory {
+  top
+  bottom
+  shoe
+  accessory
+  outerwear
+  dress
+}
+
+enum ApparelSubcategory {
+  tshirt
+  shirt
+  jeans
+  shorts
+  sneakers
+  heels
+  jacket
+  coat
+  other
+}
+
+enum ApparelStatus {
+  pending
+  complete
+  deleted
+}
+
+enum ApparelMaterial {
+  Cotton
+  Linen
+  Denim
+  Polyester
+  Nylon
+  Silk
+  Wool
+  Rayon
+}
+
+type ApparelResponse {
+  success: Boolean!
+  message: String!
+  apparel: Apparel
+}
+
+type ApparelListResponse {
+  success: Boolean!
+  message: String!
+  apparels: [Apparel!]!
+  pagination: PaginationInfo!
+}
+
+type PaginationInfo {
+  total: Int!
+  limit: Int!
+  offset: Int!
+  hasMore: Boolean!
+}
+
+type DeleteApparelResponse {
+  success: Boolean!
+  message: String!
+}
+
+# Sorting and filtering options
+enum ApparelSortOption {
+  NEWEST
+  OLDEST
+  TOP_RATED
+}
+
+type WardrobeColor {
+  colorname: String!
+  colorvalue: String!
+  count: Int!
+}
+
+type WardrobeColorsResponse {
+  success: Boolean!
+  message: String!
+  colors: [WardrobeColor!]!
+}
+
+extend type Query {
+  # Apparel Queries
+  getUserApparels(limit: Int = 50, offset: Int = 0): ApparelListResponse!
+  getUserApparelById(apparelId: Int!): ApparelResponse!
+  searchApparels(
+    searchTerm: String!
+    limit: Int = 50
+    offset: Int = 0
+  ): ApparelListResponse!
+
+  # New filtered and sorted query
+  getFilteredUserApparels(
+    limit: Int = 50
+    offset: Int = 0
+    sortBy: ApparelSortOption = NEWEST
+    colors: [String!]
+    categories: [ApparelCategory!]
+    favorite: Boolean
+  ): ApparelListResponse!
+
+  # Get all available colors in user's wardrobe
+  getUserWardrobeColors: WardrobeColorsResponse!
+}
+
+extend type Mutation {
+  # Apparel Mutations
+
+  updateApparel(
+    id: Int!
+    category: ApparelCategory
+    subcategory: ApparelSubcategory
+    brand: String
+    name: String
+    description: String
+    material: ApparelMaterial
+    colors: [ColorInput!]
+    favorite: Boolean
+  ): ApparelResponse!
+
+  deleteApparel(id: Int!): DeleteApparelResponse!
+}

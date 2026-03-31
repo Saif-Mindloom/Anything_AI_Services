@@ -1,0 +1,51 @@
+# Node modules
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SQLite database (not needed in Docker)
+*.sqlite
+*.sqlite3
+database.sqlite
+
+# Logs
+logs
+*.log
+
+# Test coverage
+coverage
+.nyc_output
+
+# Build files
+dist
+build
+
+# Documentation
+*.md
+!README.md
+
+# Docker files
+Dockerfile
+docker-compose*.yml
+.dockerignore
+

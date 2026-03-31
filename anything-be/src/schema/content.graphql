@@ -1,0 +1,17 @@
+type ChatStarterQuestion {
+  question: String!
+}
+
+type GetChatStartersResult {
+  starters: [ChatStarterQuestion!]!
+}
+
+type GetAppDocumentResult {
+  type: String!
+  url: String!
+}
+
+extend type Query {
+  getChatStarters: GetChatStartersResult!
+  getAppDocument(type: String!): GetAppDocumentResult!
+}

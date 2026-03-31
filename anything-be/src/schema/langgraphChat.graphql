@@ -1,0 +1,119 @@
+"""
+LangGraph Chat & Rating - AI-powered outfit chat and rating
+Integrates with LangGraph Service for intelligent outfit suggestions and ratings
+"""
+type ChatAIResponse {
+  """
+  Whether the operation was successful
+  """
+  success: Boolean!
+
+  """
+  Human-readable message
+  """
+  message: String!
+
+  """
+  The AI-generated response
+  """
+  output: String
+}
+
+type RateOutfitResponse {
+  """
+  Whether the operation was successful
+  """
+  success: Boolean!
+
+  """
+  Human-readable message
+  """
+  message: String!
+
+  """
+  Numeric rating (0-10)
+  """
+  rating: Float
+
+  """
+  Full analysis and explanation
+  """
+  fullResponse: String
+}
+
+input ChatWithAIInput {
+  """
+  User's message/question about outfit
+  """
+  message: String!
+
+  """
+  Outfit ID (optional - if referring to specific outfit)
+  """
+  outfitId: Int
+
+  """
+  Image URL of outfit/clothing item (optional)
+  """
+  imageUrl: String
+
+  """
+  Current outfit rating (optional, 0-10)
+  """
+  rating: Float
+
+  """
+  Include rating context in AI decision-making (optional)
+  """
+  includeRating: Boolean
+}
+
+input RateOutfitInput {
+  """
+  Outfit ID to rate
+  """
+  outfitId: BigInt!
+
+  """
+  Image URL of the outfit (optional)
+  """
+  imageUrl: String
+
+  """
+  Custom rating instructions (optional)
+  """
+  chatInput: String
+}
+
+extend type Mutation {
+  """
+  Chat with AI about outfits
+
+  Examples:
+    - "What should I wear tomorrow?"
+    - "Can you suggest improvements for this outfit?"
+    - "Is this outfit appropriate for a business meeting?"
+
+  The AI considers:
+    - User's wardrobe (via MCP tools)
+    - Weather forecast (via MCP tools)
+    - Upcoming occasions/holidays (via MCP tools)
+    - Fashion knowledge and principles (via RAG)
+
+  Returns: ChatAIResponse with AI-generated suggestion or advice
+  """
+  chatWithAI(input: ChatWithAIInput!): ChatAIResponse!
+
+  """
+  Rate an outfit using AI
+
+  The AI evaluates the outfit based on fashion principles:
+    - Color coordination
+    - Fit and proportion
+    - Occasion appropriateness
+    - Trend alignment
+
+  Returns: RateOutfitResponse with numeric rating (0-10) and analysis
+  """
+  rateOutfit(input: RateOutfitInput!): RateOutfitResponse!
+}

@@ -1,0 +1,133 @@
+"""
+Outfit Chat - Interactive chat with AI about outfits
+"""
+type ChatSession {
+  """
+  Unique session identifier
+  """
+  sessionId: String!
+
+  """
+  Outfit ID for this chat (optional - for outfit-specific chats)
+  """
+  outfitId: BigInt
+
+  """
+  User ID who owns this chat
+  """
+  userId: String!
+
+  """
+  Whether this chat includes rating information
+  """
+  includeRating: Boolean!
+
+  """
+  Timestamp when session was created
+  """
+  createdAt: String!
+}
+
+type ChatMessage {
+  """
+  The AI's response
+  """
+  message: String!
+
+  """
+  Session ID for this conversation
+  """
+  sessionId: String!
+}
+
+type CreateChatSessionResponse {
+  """
+  Whether the operation was successful
+  """
+  success: Boolean!
+
+  """
+  Human-readable message
+  """
+  message: String!
+
+  """
+  The created chat session
+  """
+  session: ChatSession
+}
+
+type SendChatMessageResponse {
+  """
+  Whether the operation was successful
+  """
+  success: Boolean!
+
+  """
+  Human-readable message
+  """
+  message: String!
+
+  """
+  The chat response from AI
+  """
+  response: String
+
+  """
+  Session ID for this conversation
+  """
+  sessionId: String
+}
+
+input CreateChatSessionInput {
+  """
+  Outfit ID to chat about (optional - omit for general fashion chat)
+  """
+  outfitId: BigInt
+
+  """
+  Whether to include rating in the chat context
+  """
+  includeRating: Boolean!
+}
+
+input SendChatMessageInput {
+  """
+  Session ID from createChatSession
+  """
+  sessionId: String!
+
+  """
+  User's message/question
+  """
+  chatInput: String!
+}
+
+extend type Query {
+  """
+  Get active chat session by ID (for debugging/verification)
+  """
+  getChatSession(sessionId: String!): ChatSession
+}
+
+extend type Mutation {
+  """
+  Create a new chat session for outfit-specific or general fashion chat
+  Returns a session ID that should be used for subsequent messages
+
+  - With outfitId: Chat about a specific outfit with visual analysis
+  - Without outfitId: General fashion advice, wardrobe suggestions, styling tips
+  """
+  createChatSession(input: CreateChatSessionInput!): CreateChatSessionResponse!
+
+  """
+  Send a message in an existing chat session
+  The AI will respond based on the outfit image and context
+  """
+  sendChatMessage(input: SendChatMessageInput!): SendChatMessageResponse!
+
+  """
+  End a chat session (optional - sessions auto-expire after 1 hour)
+  """
+  endChatSession(sessionId: String!): Boolean!
+}

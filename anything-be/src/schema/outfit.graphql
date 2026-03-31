@@ -1,0 +1,171 @@
+type SetOutfitVisibilityResult {
+  success: Boolean!
+  message: String!
+}
+
+type GenerateOutfitAnglesResult {
+  success: Boolean!
+  message: String!
+  anglesGenerated: Int!
+}
+
+type QueueOutfitAnglesResult {
+  success: Boolean!
+  message: String!
+  jobId: String
+}
+
+input BackAngleAvailabilityInput {
+  top: Boolean
+  bottom: Boolean
+  outerwear: Boolean
+  dress: Boolean
+}
+
+type Accessory {
+  id: Int!
+  outfitId: BigInt!
+  accessoryType: String!
+  description: String
+  imageUrl: String
+  gsUtil: String
+  status: String!
+  createdAt: String
+  updatedAt: String
+}
+
+type GenerateAccessoriesResult {
+  success: Boolean!
+  message: String!
+  jobId: String
+}
+
+type GetAccessoriesResult {
+  success: Boolean!
+  message: String!
+  accessories: [Accessory!]!
+}
+
+type ShuffleOutfitResult {
+  success: Boolean!
+  message: String!
+  topId: Int
+  bottomId: Int
+  shoeId: Int
+  dressId: Int
+  outerwearId: Int
+  topUrl: String
+  bottomUrl: String
+  shoeUrl: String
+  dressUrl: String
+  outerwearUrl: String
+  explanation: String
+}
+
+type Outfit {
+  id: BigInt!
+  topId: Int!
+  bottomId: Int!
+  shoeId: Int!
+  dressId: Int!
+  outerwearId: Int!
+  accessoryIds: [Int!]!
+  primaryImageUrl: String
+  gsUtil: String
+  imageList: String
+  rating: Float
+  poseLeft: String
+  poseRight: String
+  hasAccessories: Boolean!
+  outfitSummary: String
+  accessoriesSummary: String
+  accessories: [Accessory!]
+}
+
+type GetOutfitDetailsResult {
+  success: Boolean!
+  message: String!
+  outfit: Outfit
+}
+
+type FavouritedOutfit {
+  id: BigInt!
+  primaryImageUrl: String
+}
+
+type GetFavouritedOutfitsResult {
+  success: Boolean!
+  message: String!
+  outfits: [FavouritedOutfit!]!
+}
+
+type OutfitIdUrlPair {
+  id: BigInt!
+  url: String!
+}
+
+type GetVisibleOutfitsResult {
+  success: Boolean!
+  message: String!
+  outfits: [OutfitIdUrlPair!]!
+}
+
+extend type Query {
+  getOutfitDetails(outfitId: BigInt!): GetOutfitDetailsResult!
+  getFavouritedOutfits: GetFavouritedOutfitsResult!
+  getVisibleOutfits: GetVisibleOutfitsResult!
+  getOutfitDetailsForMCP(
+    outfitId: BigInt!
+    userId: Int!
+  ): GetOutfitDetailsResult!
+  getOutfitAccessories(outfitId: BigInt!): GetAccessoriesResult!
+}
+
+type ToggleFavouriteResult {
+  success: Boolean!
+  message: String!
+  isFavourite: Boolean!
+}
+
+type GenerateOutfitCompositeResult {
+  success: Boolean!
+  message: String!
+  imageUrl: String
+}
+
+type TestAccessoryTryOnResult {
+  success: Boolean!
+  message: String!
+  imageUrl: String
+}
+
+extend type Mutation {
+  setOutfitVisibility(outfitId: BigInt!): SetOutfitVisibilityResult!
+  generateOutfitAngles(
+    outfitId: BigInt!
+    backAngleAvailability: BackAngleAvailabilityInput
+  ): GenerateOutfitAnglesResult!
+  queueOutfitAngles(
+    outfitId: BigInt!
+    backAngleAvailability: BackAngleAvailabilityInput
+  ): QueueOutfitAnglesResult!
+  toggleOutfitFavourite(outfitId: BigInt!): ToggleFavouriteResult!
+  generateAccessories(outfitId: BigInt!): GenerateAccessoriesResult!
+  shuffleOutfit(
+    topId: Int
+    bottomId: Int
+    shoeId: Int
+    dressId: Int
+    outerwearId: Int
+  ): ShuffleOutfitResult!
+  testGenerateOutfitComposite(outfitId: BigInt!): GenerateOutfitCompositeResult!
+  testAccessoryTryOn(
+    modelUrl: String!
+    accessory1Url: String
+    accessory1Category: String
+    accessory2Url: String
+    accessory2Category: String
+    accessory3Url: String
+    accessory3Category: String
+  ): TestAccessoryTryOnResult!
+}

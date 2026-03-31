@@ -1,0 +1,43 @@
+type VirtualTryOnResponse {
+  success: Boolean!
+  message: String!
+  imageBase64: String
+  savedFileName: String
+  downloadUrl: String
+  gsUri: String
+  outfitId: Int
+}
+
+extend type Mutation {
+  # Virtual Try-On with direct apparel IDs and GS URL
+  # Supports two modes:
+  # 1. Sequential mode: Use apparelGSURL (one garment at a time)
+  # 2. Batch mode: Use topGSURL/bottomGSURL/shoesGSURL/dressGSURL (multiple garments at once)
+  virtualTryOn(
+    topId: Int
+    bottomId: Int
+    shoesId: Int
+    dressId: Int
+    outerwearId: Int
+    # Sequential mode (backward compatible)
+    apparelGSURL: String
+    # Batch mode (for shuffle feature)
+    topGSURL: String
+    bottomGSURL: String
+    shoesGSURL: String
+    dressGSURL: String
+    outerwearGSURL: String
+    # Optional accessories (applied after garment try-on)
+    accessory1Url: String
+    accessory1Category: String
+    accessory1Description: String
+    accessory2Url: String
+    accessory2Category: String
+    accessory2Description: String
+    accessory3Url: String
+    accessory3Category: String
+    accessory3Description: String
+    baseModel: Boolean!
+    newModelGsUrl: String
+  ): VirtualTryOnResponse!
+}

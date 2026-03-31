@@ -1,0 +1,34 @@
+type SendOtpResult {
+  success: Boolean!
+  message: String!
+  isExistingUser: Boolean
+  otpExpiresIn: Int!
+}
+
+type VerifyOtpResult {
+  isVerified: Boolean!
+  status: String!
+  sessionToken: String
+}
+
+type LoginResult {
+  status: String!
+  authToken: String
+  userId: Int
+  userProfileCompleted: Boolean!
+}
+
+extend type Mutation {
+  sendOtp(email: String!): SendOtpResult!
+  verifyOtp(email: String!, otp: String!): VerifyOtpResult!
+  login(email: String!, password: String!): LoginResult!
+}
+
+type CheckPasswordValidityResponse {
+  isValid: Boolean!
+  status: String!
+}
+
+extend type Query {
+  checkPasswordValidity(password: String!): CheckPasswordValidityResponse!
+}

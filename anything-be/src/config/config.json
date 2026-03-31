@@ -1,0 +1,31 @@
+{
+  "development": {
+    "username": "postgres",
+    "password": "postgres",
+    "database": "anything_backend",
+    "host": "postgres",
+    "port": 5432,
+    "dialect": "postgres"
+  },
+  "test": {
+    "username": "postgres",
+    "password": "postgres",
+    "database": "anything_backend_test",
+    "host": "127.0.0.1",
+    "port": 5432,
+    "dialect": "postgres"
+  },
+  "production": {
+    "username": "YOUR_PROD_USER",
+    "password": "YOUR_PROD_PASSWORD",
+    "database": "YOUR_PROD_DB",
+    "host": "YOUR_PROD_HOST",
+    "port": 5432,
+    "dialect": "postgres",
+    "dialectOptions": {
+      "ssl": {
+        "rejectUnauthorized": false
+      }
+    }
+  }
+}

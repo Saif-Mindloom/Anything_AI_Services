@@ -1,0 +1,145 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: anything-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-anything_backend}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-anything_backend}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - anything-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: anything-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - anything-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: anything-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PORT:-4000}
+      DB_DIALECT: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-anything_backend}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_SSL: false
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_change_this_in_production}
+
+      SMS_API_KEY: ${SMS_API_KEY:-}
+      SMS_SENDER_ID: ${SMS_SENDER_ID:-CDH}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Gemini API Configuration
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      # OpenAI API Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Remove.bg API Configuration
+      REMOVEBG_API_KEY: ${REMOVEBG_API_KEY}
+      # Google Cloud Storage Configuration
+      GCS_BUCKET_NAME: ${GCS_BUCKET_NAME}
+      GOOGLE_APPLICATION_CREDENTIALS: /root/.config/gcloud/application_default_credentials.json
+      # Clarifai Configuration
+      PAT: ${PAT}
+      USER_ID: ${USER_ID}
+      APP_ID: ${APP_ID}
+      MODEL_ID: ${MODEL_ID}
+      MODEL_VERSION_ID: ${MODEL_VERSION_ID}
+      CLASSIFICATION_MODEL_ID: ${CLASSIFICATION_MODEL_ID}
+      CLASSIFICATION_MODEL_VERSION_ID: ${CLASSIFICATION_MODEL_VERSION_ID}
+      # n8n Webhook Configuration
+      N8N_RATING_WEBHOOK_URL: ${N8N_RATING_WEBHOOK_URL:-http://host.docker.internal:5678/webhook/rating}
+      N8N_CHAT_WITH_RATING_WEBHOOK_URL: ${N8N_CHAT_WITH_RATING_WEBHOOK_URL:-}
+      N8N_CHAT_WITHOUT_RATING_WEBHOOK_URL: ${N8N_CHAT_WITHOUT_RATING_WEBHOOK_URL:-}
+      # Replace the `GOOGLE_CLOUD_PROJECT_ID` and `GOOGLE_CLOUD_LOCATION` values
+      # with appropriate values for your project.
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION}
+      # LangGraph Service Integration
+      LANGGRAPH_SERVICE_URL: ${LANGGRAPH_SERVICE_URL:-http://langgraph-service:3002}
+      LANGGRAPH_API_KEY: ${LANGGRAPH_API_KEY:-langgraph-secret-key-change-in-production}
+      MSG91_EMAIL_AUTH_KEY: ${MSG91_EMAIL_AUTH_KEY}
+      MSG91_EMAIL_FROM_EMAIL: ${MSG91_EMAIL_FROM_EMAIL}
+      MSG91_EMAIL_FROM_NAME: ${MSG91_EMAIL_FROM_NAME}
+      MSG91_EMAIL_DOMAIN: ${MSG91_EMAIL_DOMAIN}
+      MSG91_EMAIL_OTP_TEMPLATE_ID: ${MSG91_EMAIL_OTP_TEMPLATE_ID}
+
+    ports:
+      - "${PORT:-4000}:4000"
+    volumes:
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./codes:/app/codes:ro
+      - ./generated-images:/app/generated-images
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+    networks:
+      - anything-network
+
+  # pgAdmin for PostgreSQL GUI
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: anything-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - anything-network
+    depends_on:
+      - postgres
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  anything-network:
+    driver: bridge

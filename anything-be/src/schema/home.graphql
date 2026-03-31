@@ -1,0 +1,43 @@
+type IdUrlPair {
+  id: BigInt!
+  url: String!
+}
+
+type MainLandingImage {
+  outfitId: BigInt!
+  url: String!
+  angle: String!
+}
+
+type AnythingPick {
+  outfit: IdUrlPair
+  outfitSummary: String
+  top: IdUrlPair
+  bottom: IdUrlPair
+  shoes: IdUrlPair
+}
+
+type OutfitCalendarItem {
+  date: String!
+  outfit: IdUrlPair
+}
+
+type UserHomePageDetails {
+  baseModelUrl: String!
+  baseModelGsUtil: String
+  savedLooks: [IdUrlPair]
+  outfitCalendar: [OutfitCalendarItem]
+  anythingPick: AnythingPick
+  recentlyAddedApparel: [IdUrlPair!]
+  status: String!
+}
+
+type MainLandingImagesResponse {
+  mainLandingImages: [MainLandingImage]
+  status: String!
+}
+
+type Query {
+  getUserHomePageDetails: UserHomePageDetails!
+  getMainLandingImages: MainLandingImagesResponse!
+}

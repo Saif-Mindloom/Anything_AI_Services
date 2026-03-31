@@ -1,0 +1,90 @@
+type EditUserDetailsResult {
+  name: String!
+  dob: String
+  height: Int!
+  weight: Int!
+  status: String!
+}
+
+type CheckNameAvailabilityResult {
+  isAvailable: Boolean!
+  status: String!
+}
+
+type UserOnboardingStatusResult {
+  status: String!
+  profileCompleted: Boolean!
+  photosUploaded: Boolean!
+  modelGenerated: Boolean!
+  onboardingCompleted: Boolean!
+}
+
+type UserProfileDetailsReturn {
+  status: String!
+  name: String
+  age: Int
+  dob: String
+  weight: Int
+  height: Int
+  email: String
+  gender: String
+  mainLandingImage: String
+  wardrobeDetails: UserWardrobeDetails
+}
+
+type UserWardrobeDetails {
+  looksCount: Int!
+  maxlimitApparels: Int!
+  itemsCount: Int!
+  looks: [IdUrlPair!]!
+}
+
+extend type Query {
+  getUserOnboardingStatus(userId: Int!): UserOnboardingStatusResult!
+  checkIfNameAvailable(name: String!): CheckNameAvailabilityResult!
+  getUserProfileDetails: UserProfileDetailsReturn!
+  getUserProfileDetailsForMCP(userId: Int!): UserProfileDetailsReturn!
+}
+
+type ScheduleUserDeletionResult {
+  success: Boolean!
+  scheduledFor: String
+  message: String!
+}
+
+type CancelUserDeletionResult {
+  success: Boolean!
+  message: String!
+}
+
+type DeleteUserResult {
+  success: Boolean!
+  message: String!
+}
+
+extend type Mutation {
+  editUserDetails(
+    email: String
+    name: String
+    dob: String
+    height: Int
+    weight: Int
+  ): EditUserDetailsResult!
+
+  """
+  Schedules the authenticated user's account for deletion after a 30-day grace period.
+  All data and cloud assets will be permanently erased after that period.
+  """
+  scheduleUserDeletion: ScheduleUserDeletionResult!
+
+  """
+  Cancels a previously scheduled deletion while the account is still within the grace period.
+  """
+  cancelScheduledUserDeletion: CancelUserDeletionResult!
+
+  """
+  Immediately and permanently deletes the authenticated user's account, all associated
+  database records, and every cloud asset stored in GCS. This action is irreversible.
+  """
+  deleteUserImmediately: DeleteUserResult!
+}
