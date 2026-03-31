@@ -5,16 +5,13 @@ import { gcsService } from "./gcsService";
 import { removeBackgroundFromBase64 } from "./backgroundRemovalService";
 import { centerAndStandardizeImage } from "../helpers/imageUtils";
 
-
 export const regenerateModelForExistingUser = async (
   userId: string,
   bodyPhotoFiles: Express.Multer.File[],
   facePhotoFiles: Express.Multer.File[] = [],
 ): Promise<{ modelId: string; modelPhoto: string; status: string }> => {
   try {
-    console.log(
-      `Starting model regeneration for existing user ID: ${userId}`,
-    );
+    console.log(`Starting model regeneration for existing user ID: ${userId}`);
 
     // Validate that user exists in database
     const user = await User.findByPk(userId);
