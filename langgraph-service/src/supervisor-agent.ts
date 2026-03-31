@@ -181,6 +181,40 @@ export class SupervisorAgent {
         userQuery,
       );
 
+    // Detect wardrobe inventory queries like "what shoes do I have?", "how many shoes", "show me all"
+    const isWardrobeInventoryQuery =
+      // Pattern 1: "what/which...do i have/own"
+      (((userQuery.includes("what") || userQuery.includes("which")) &&
+        (userQuery.includes("do i have") || userQuery.includes("do i own"))) ||
+        // Pattern 2: "how many...do i have/have i got"
+        (userQuery.includes("how many") &&
+          (userQuery.includes("do i have") ||
+            userQuery.includes("have i") ||
+            userQuery.includes("i have"))) ||
+        // Pattern 3: "show me all/my", "list all/my"
+        ((userQuery.includes("show me") || userQuery.includes("list")) &&
+          (userQuery.includes("all") ||
+            userQuery.includes("my") ||
+            userQuery.includes("every")))) &&
+      // Must reference wardrobe items
+      (userQuery.includes("shoe") ||
+        userQuery.includes("sneaker") ||
+        userQuery.includes("boot") ||
+        userQuery.includes("heel") ||
+        userQuery.includes("accessor") ||
+        userQuery.includes("clothes") ||
+        userQuery.includes("apparel") ||
+        userQuery.includes("wardrobe") ||
+        userQuery.includes("item") ||
+        userQuery.includes("top") ||
+        userQuery.includes("bottom") ||
+        userQuery.includes("dress") ||
+        userQuery.includes("shirt") ||
+        userQuery.includes("pant") ||
+        userQuery.includes("jean") ||
+        userQuery.includes("jacket") ||
+        userQuery.includes("coat"));
+
     // Detect pairing/matching queries — user wants to combine items
     const isPairingQuery =
       userQuery.includes("go well with") ||
@@ -201,6 +235,7 @@ export class SupervisorAgent {
     const needsMCP =
       isOutfitRecommendation || // Outfit recommendations always need user data
       refersToPersonalItem || // User is asking about something they own
+      isWardrobeInventoryQuery || // User is asking what items they have
       isPairingQuery || // User wants to pair/match items
       userQuery.includes("wardrobe") ||
       userQuery.includes("apparel") ||
@@ -308,20 +343,33 @@ export class SupervisorAgent {
           (userQuery.toLowerCase().includes("tomorrow") ||
             userQuery.toLowerCase().includes("today")));
 
-      // Detect if query is specifically about accessories
+      // Detect if query is specifically about accessories (including shoes)
+      const lowerQuery = userQuery.toLowerCase();
       const isAccessoryQuery =
-        userQuery.toLowerCase().includes("accessor") ||
-        userQuery.toLowerCase().includes("bag") ||
-        userQuery.toLowerCase().includes("jewelry") ||
-        userQuery.toLowerCase().includes("hat") ||
-        userQuery.toLowerCase().includes("scarf") ||
-        userQuery.toLowerCase().includes("belt");
+        lowerQuery.includes("accessor") ||
+        lowerQuery.includes("bag") ||
+        lowerQuery.includes("jewelry") ||
+        lowerQuery.includes("earring") ||
+        lowerQuery.includes("necklace") ||
+        lowerQuery.includes("bracelet") ||
+        lowerQuery.includes("ring") ||
+        lowerQuery.includes("watch") ||
+        lowerQuery.includes("hat") ||
+        lowerQuery.includes("cap") ||
+        lowerQuery.includes("scarf") ||
+        lowerQuery.includes("belt") ||
+        lowerQuery.includes("shoe") ||
+        lowerQuery.includes("sneaker") ||
+        lowerQuery.includes("boot") ||
+        lowerQuery.includes("heel");
 
       // Create analysis prompt
-      const systemPrompt = `You are a fashion data analyst with access to user wardrobe data.
-      
+      const systemPrompt = `You are a fashion data analyst. Your ONLY job is to call the appropriate tools to fetch user data. You MUST NOT provide any analysis or recommendations - only fetch data.
+
+CRITICAL INSTRUCTION: You MUST call at least one tool. DO NOT respond without calling tools.
+
 Available tools:
-- get_user_apparels: Get user's clothing items (wardrobe). Can filter by category including "accessory"
+- get_user_apparels: Get user's clothing items (wardrobe). Can filter by category: "top", "bottom", "shoe", "accessory", "outerwear", "dress"
 - get_outfit_details: Get specific outfit information including AI-generated accessories
 - get_user_profile: Get user profile and preferences
 - suggest_apparels: Suggest alternative items to improve outfit
@@ -332,32 +380,45 @@ User ID: ${state.userId}
 ${state.outfitId ? `Outfit ID: ${state.outfitId}` : ""}
 ${state.rating ? `Current Rating: ${state.rating}/10` : ""}
 
-${isAccessoryQuery ? `IMPORTANT: User is asking about accessories. Use get_user_apparels with category: "accessory" to retrieve accessory items from their wardrobe.` : ""}
+Query: ${userQuery}
+
+IMPORTANT INSTRUCTIONS:
 
 ${
-  isOutfitRecommendation
+  lowerQuery.includes("shoe") ||
+  lowerQuery.includes("sneaker") ||
+  lowerQuery.includes("boot") ||
+  lowerQuery.includes("heel")
     ? `
-CRITICAL: For outfit recommendation queries, you ABSOLUTELY MUST gather wardrobe data:
+🔴 USER IS ASKING ABOUT SHOES - YOU MUST CALL THIS TOOL:
+Call: get_user_apparels with { "userId": "${state.userId}", "category": "shoe" }`
+    : isAccessoryQuery
+      ? `
+🔴 USER IS ASKING ABOUT ACCESSORIES - YOU MUST CALL THIS TOOL:
+Call: get_user_apparels with { "userId": "${state.userId}", "category": "accessory" }`
+      : isOutfitRecommendation
+        ? `
+🔴 USER IS ASKING FOR OUTFIT RECOMMENDATIONS - YOU MUST CALL THESE TOOLS IN ORDER:
+1. Call: get_weather_forecast with { "location": "Mumbai, India", "days": 7 }
+2. Call: get_occasions with { "includeUpcoming": true }
+3. Call: get_user_apparels with { "userId": "${state.userId}" }
 
-REQUIRED TOOL CALLS (in this order):
-1. Call get_weather_forecast - REQUIRED to understand weather conditions
-2. Call get_occasions - REQUIRED to check for special events
-3. Call get_user_apparels - REQUIRED to see user's available clothing items
-4. Optionally call get_user_profile - for user preferences
-
-IMPORTANT: You MUST call get_user_apparels regardless of anything else. The user cannot get outfit suggestions without knowing their wardrobe.
-
-After gathering ALL this data, provide personalized suggestions based on:
-- Weather conditions
-- Special occasions/festivals
-- User's actual available clothing items
-- User preferences
-
-The user is asking what to wear TODAY - gather complete context from their actual wardrobe!`
-    : "Analyze the query and use the appropriate tools to gather relevant user data."
+You MUST call all three tools. The user cannot receive proper outfit recommendations without this data.`
+        : lowerQuery.includes("wardrobe") ||
+            lowerQuery.includes("clothes") ||
+            lowerQuery.includes("apparel")
+          ? `
+🔴 USER IS ASKING ABOUT THEIR WARDROBE - YOU MUST CALL THIS TOOL:
+Call: get_user_apparels with { "userId": "${state.userId}" }`
+          : state.outfitId
+            ? `
+🔴 USER IS ASKING ABOUT A SPECIFIC OUTFIT - YOU MUST CALL THIS TOOL:
+Call: get_outfit_details with { "userId": "${state.userId}", "outfitId": ${state.outfitId} }`
+            : `
+Based on the query, determine which tool(s) to call and execute them. You MUST call at least one tool - do not respond without fetching data.`
 }
 
-Query: ${userQuery}`;
+REMEMBER: Your job is ONLY to fetch data by calling tools. Do NOT provide analysis, recommendations, or conversational responses.`;
 
       const response = await llmWithTools.invoke([
         new SystemMessage(systemPrompt),
@@ -369,6 +430,10 @@ Query: ${userQuery}`;
       console.log(
         "🔍 Checking for tool calls:",
         response.tool_calls?.length || 0,
+      );
+      console.log(
+        "🔍 Response content:",
+        response.content?.toString().substring(0, 200),
       );
 
       if (response.tool_calls && response.tool_calls.length > 0) {
@@ -399,6 +464,12 @@ Query: ${userQuery}`;
                 );
                 const result = await tool.invoke(enhancedArgs);
                 console.log("✅ Tool", toolCall.name, "succeeded");
+                console.log(
+                  "✅ Result preview:",
+                  typeof result === "string"
+                    ? result.substring(0, 200)
+                    : JSON.stringify(result).substring(0, 200),
+                );
                 return `[${toolCall.name}]\n${result}`;
               } catch (error) {
                 console.log("❌ Tool", toolCall.name, "failed:", error);
@@ -409,6 +480,27 @@ Query: ${userQuery}`;
           }),
         );
         mcpResults = toolResults.join("\n\n");
+      } else {
+        // LLM did not call any tools - this is a problem for data queries
+        console.log("⚠️  WARNING: LLM did not call any tools!");
+        console.log(
+          "⚠️  This might indicate the LLM ignored the tool-calling instruction",
+        );
+        console.log("⚠️  LLM response:", response.content?.toString());
+
+        // For critical queries, return an error message
+        const criticalQuery =
+          userQuery.toLowerCase().includes("shoe") ||
+          userQuery.toLowerCase().includes("wardrobe") ||
+          userQuery.toLowerCase().includes("apparel") ||
+          userQuery.toLowerCase().includes("clothes") ||
+          userQuery.toLowerCase().includes("recommend outfit") ||
+          userQuery.toLowerCase().includes("what to wear");
+
+        if (criticalQuery) {
+          mcpResults =
+            "ERROR: The system failed to retrieve your wardrobe data. This is a technical issue - the data fetching tool was not executed properly.";
+        }
       }
 
       console.log("📊 MCP Results length:", mcpResults.length);
@@ -481,7 +573,20 @@ Query: ${userQuery}`;
       let contextParts: string[] = [];
 
       if (state.mcpResults) {
-        contextParts.push(`USER DATA:\n${state.mcpResults}`);
+        // Check if MCP results contain an error or no data
+        if (
+          state.mcpResults.includes("ERROR:") ||
+          state.mcpResults.includes("No specific user data retrieved") ||
+          state.mcpResults.includes("failed to retrieve")
+        ) {
+          console.log("⚠️  MCP results contain error or no data");
+          console.log("⚠️  MCP results:", state.mcpResults.substring(0, 200));
+          contextParts.push(
+            `SYSTEM ERROR: ${state.mcpResults}\n\nIMPORTANT: Tell the user there was a technical issue retrieving their wardrobe data and ask them to try again. Do NOT make up data or provide generic suggestions.`,
+          );
+        } else {
+          contextParts.push(`USER DATA:\n${state.mcpResults}`);
+        }
       }
 
       if (state.ragResults) {
