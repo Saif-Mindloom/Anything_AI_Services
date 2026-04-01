@@ -1,0 +1,33 @@
+type SendFCMNotificationResponse {
+  success: Boolean!
+  message: String!
+  name: String
+}
+
+enum FCMNotificationMode {
+  SILENT
+  DISPLAY
+  HYBRID
+}
+
+input FCMNotificationInput {
+  title: String!
+  body: String!
+}
+
+input FCMDataEntryInput {
+  key: String!
+  value: String!
+}
+
+input SendFCMNotificationInput {
+  token: String!
+  mode: FCMNotificationMode!
+  notification: FCMNotificationInput
+  data: [FCMDataEntryInput!]
+  androidPriority: String
+}
+
+extend type Mutation {
+  sendFCMNotification(input: SendFCMNotificationInput!): SendFCMNotificationResponse!
+}

@@ -11,6 +11,7 @@ import virtualTryOn from "./virtualTryOn.graphql";
 import outfit from "./outfit.graphql";
 import outfitChat from "./outfitChat.graphql";
 import langgraphChat from "./langgraphChat.graphql";
+import notification from "./notification.graphql";
 
 import { makeExecutableSchema } from "@graphql-tools/schema";
 import { GraphQLSchema } from "graphql";
@@ -30,6 +31,7 @@ export const typeDefs = [
   outfit,
   outfitChat,
   langgraphChat,
+  notification,
 ];
 
 // Export the executable schema

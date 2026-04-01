@@ -78,7 +78,8 @@ services:
       REMOVEBG_API_KEY: ${REMOVEBG_API_KEY}
       # Google Cloud Storage Configuration
       GCS_BUCKET_NAME: ${GCS_BUCKET_NAME}
-      GOOGLE_APPLICATION_CREDENTIALS: /root/.config/gcloud/application_default_credentials.json
+      GOOGLE_IMPERSONATE_SERVICE_ACCOUNT: ${GOOGLE_IMPERSONATE_SERVICE_ACCOUNT}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID}
       # Clarifai Configuration
       PAT: ${PAT}
       USER_ID: ${USER_ID}

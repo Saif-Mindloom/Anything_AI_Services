@@ -135,7 +135,8 @@ services:
       - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-anything-ai-assets}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
-      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+      - GOOGLE_IMPERSONATE_SERVICE_ACCOUNT=${GOOGLE_IMPERSONATE_SERVICE_ACCOUNT}
+      - FCM_PROJECT_ID=${FCM_PROJECT_ID}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
       # LangGraph Integration
       - LANGGRAPH_SERVICE_URL=http://langgraph-service:3002

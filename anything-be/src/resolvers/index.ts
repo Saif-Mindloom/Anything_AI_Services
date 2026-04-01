@@ -10,6 +10,7 @@ import virtualTryOnResolvers from "./virtualTryOn";
 import outfitResolvers from "./outfit";
 import { outfitChatResolvers } from "./outfitChat";
 import langgraphChatResolvers from "./langgraphChat";
+import notificationResolvers from "./notification";
 
 // Combine all resolver objects
 const allResolvers = [
@@ -24,6 +25,7 @@ const allResolvers = [
   outfitResolvers,
   outfitChatResolvers,
   langgraphChatResolvers,
+  notificationResolvers,
 ];
 
 // Merge all resolvers into a single resolver object
