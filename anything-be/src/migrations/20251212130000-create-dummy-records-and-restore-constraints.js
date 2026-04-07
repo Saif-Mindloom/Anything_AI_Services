@@ -2,6 +2,8 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const columns = await queryInterface.describeTable("outfits");
+
     // Create dummy user with ID 0
     await queryInterface.sequelize.query(
       `INSERT INTO users (id, name, email, dob, height, weight, created_at, updated_at)
@@ -35,49 +37,67 @@ module.exports = {
     );
 
     // Restore foreign key constraints on outfits table
-    await queryInterface.addConstraint("outfits", {
-      fields: ["top_id"],
-      type: "foreign key",
-      name: "outfits_top_id_fkey",
-      references: {
-        table: "apparels",
-        field: "id",
-      },
-      onDelete: "SET DEFAULT",
-    });
+    await queryInterface.sequelize.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'outfits_top_id_fkey'
+        ) THEN
+          ALTER TABLE "outfits"
+          ADD CONSTRAINT "outfits_top_id_fkey"
+          FOREIGN KEY ("top_id") REFERENCES "apparels" ("id") ON DELETE SET DEFAULT;
+        END IF;
+      END
+      $$;
+    `);
 
-    await queryInterface.addConstraint("outfits", {
-      fields: ["bottom_id"],
-      type: "foreign key",
-      name: "outfits_bottom_id_fkey",
-      references: {
-        table: "apparels",
-        field: "id",
-      },
-      onDelete: "SET DEFAULT",
-    });
+    await queryInterface.sequelize.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'outfits_bottom_id_fkey'
+        ) THEN
+          ALTER TABLE "outfits"
+          ADD CONSTRAINT "outfits_bottom_id_fkey"
+          FOREIGN KEY ("bottom_id") REFERENCES "apparels" ("id") ON DELETE SET DEFAULT;
+        END IF;
+      END
+      $$;
+    `);
 
-    await queryInterface.addConstraint("outfits", {
-      fields: ["shoe_id"],
-      type: "foreign key",
-      name: "outfits_shoe_id_fkey",
-      references: {
-        table: "apparels",
-        field: "id",
-      },
-      onDelete: "SET DEFAULT",
-    });
+    await queryInterface.sequelize.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'outfits_shoe_id_fkey'
+        ) THEN
+          ALTER TABLE "outfits"
+          ADD CONSTRAINT "outfits_shoe_id_fkey"
+          FOREIGN KEY ("shoe_id") REFERENCES "apparels" ("id") ON DELETE SET DEFAULT;
+        END IF;
+      END
+      $$;
+    `);
 
-    await queryInterface.addConstraint("outfits", {
-      fields: ["dress_id"],
-      type: "foreign key",
-      name: "outfits_dress_id_fkey",
-      references: {
-        table: "apparels",
-        field: "id",
-      },
-      onDelete: "SET DEFAULT",
-    });
+    if (columns.dress_id) {
+      await queryInterface.sequelize.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'outfits_dress_id_fkey'
+          ) THEN
+            ALTER TABLE "outfits"
+            ADD CONSTRAINT "outfits_dress_id_fkey"
+            FOREIGN KEY ("dress_id") REFERENCES "apparels" ("id") ON DELETE SET DEFAULT;
+          END IF;
+        END
+        $$;
+      `);
+    }
   },
 
   async down(queryInterface, Sequelize) {

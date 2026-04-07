@@ -3,7 +3,15 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("anything_picks", {
+    let anythingPicksExists = true;
+    try {
+      await queryInterface.describeTable("anything_picks");
+    } catch (error) {
+      anythingPicksExists = false;
+    }
+
+    if (!anythingPicksExists) {
+      await queryInterface.createTable("anything_picks", {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -57,24 +65,27 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
-    });
+      });
+    }
 
     // Add indexes for performance
-    await queryInterface.addIndex(
-      "anything_picks",
-      ["user_id", "selected_date"],
-      {
-        name: "idx_anything_picks_user_date",
-        unique: true,
-      },
+    await queryInterface.sequelize.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS "idx_anything_picks_user_date" ON "anything_picks" ("user_id", "selected_date");'
+    );
+    await queryInterface.sequelize.query(
+      'CREATE INDEX IF NOT EXISTS "idx_anything_picks_user_outfit" ON "anything_picks" ("user_id", "outfit_id");'
     );
 
-    await queryInterface.addIndex("anything_picks", ["user_id", "outfit_id"], {
-      name: "idx_anything_picks_user_outfit",
-    });
-
     // Create table to track used outfits
-    await queryInterface.createTable("used_anything_picks", {
+    let usedAnythingPicksExists = true;
+    try {
+      await queryInterface.describeTable("used_anything_picks");
+    } catch (error) {
+      usedAnythingPicksExists = false;
+    }
+
+    if (!usedAnythingPicksExists) {
+      await queryInterface.createTable("used_anything_picks", {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -110,16 +121,12 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
-    });
+      });
+    }
 
     // Add unique constraint to prevent duplicate entries
-    await queryInterface.addIndex(
-      "used_anything_picks",
-      ["user_id", "outfit_id"],
-      {
-        name: "idx_used_anything_picks_unique",
-        unique: true,
-      },
+    await queryInterface.sequelize.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS "idx_used_anything_picks_unique" ON "used_anything_picks" ("user_id", "outfit_id");'
     );
   },
 

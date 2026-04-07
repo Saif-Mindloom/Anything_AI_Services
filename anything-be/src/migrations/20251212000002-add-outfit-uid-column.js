@@ -2,6 +2,13 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const currentOutfits = await queryInterface.describeTable("outfits");
+    // If new structure is already present, avoid destructive table rebuild.
+    if (!currentOutfits.outfit_uid) {
+      console.log("outfits.outfit_uid already absent; skipping table rebuild");
+      return;
+    }
+
     // Drop calendar_entries table first (has foreign key to outfits)
     await queryInterface.dropTable("calendar_entries");
 

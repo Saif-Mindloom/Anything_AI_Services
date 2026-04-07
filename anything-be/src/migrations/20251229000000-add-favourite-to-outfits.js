@@ -2,15 +2,21 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn("outfits", "favourite", {
-      type: Sequelize.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-    });
+    const columns = await queryInterface.describeTable("outfits");
+    if (!columns.favourite) {
+      await queryInterface.addColumn("outfits", "favourite", {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      });
+    }
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.removeColumn("outfits", "favourite");
+    const columns = await queryInterface.describeTable("outfits");
+    if (columns.favourite) {
+      await queryInterface.removeColumn("outfits", "favourite");
+    }
   },
 };
 

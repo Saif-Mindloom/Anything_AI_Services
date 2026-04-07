@@ -2,14 +2,20 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn('outfits', 'outerwear_id', {
-      type: Sequelize.INTEGER,
-      allowNull: false,
-      defaultValue: 0,
-    });
+    const columns = await queryInterface.describeTable("outfits");
+    if (!columns.outerwear_id) {
+      await queryInterface.addColumn("outfits", "outerwear_id", {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      });
+    }
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.removeColumn('outfits', 'outerwear_id');
+    const columns = await queryInterface.describeTable("outfits");
+    if (columns.outerwear_id) {
+      await queryInterface.removeColumn("outfits", "outerwear_id");
+    }
   },
 };

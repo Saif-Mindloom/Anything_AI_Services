@@ -3,7 +3,15 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("accessories", {
+    let accessoriesExists = true;
+    try {
+      await queryInterface.describeTable("accessories");
+    } catch (error) {
+      accessoriesExists = false;
+    }
+
+    if (!accessoriesExists) {
+      await queryInterface.createTable("accessories", {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -59,20 +67,19 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
-    });
+      });
+    }
 
     // Add indexes for better query performance
-    await queryInterface.addIndex("accessories", ["outfit_id"], {
-      name: "accessories_outfit_id_idx",
-    });
-
-    await queryInterface.addIndex("accessories", ["accessory_type"], {
-      name: "accessories_accessory_type_idx",
-    });
-
-    await queryInterface.addIndex("accessories", ["status"], {
-      name: "accessories_status_idx",
-    });
+    await queryInterface.sequelize.query(
+      'CREATE INDEX IF NOT EXISTS "accessories_outfit_id_idx" ON "accessories" ("outfit_id");'
+    );
+    await queryInterface.sequelize.query(
+      'CREATE INDEX IF NOT EXISTS "accessories_accessory_type_idx" ON "accessories" ("accessory_type");'
+    );
+    await queryInterface.sequelize.query(
+      'CREATE INDEX IF NOT EXISTS "accessories_status_idx" ON "accessories" ("status");'
+    );
   },
 
   async down(queryInterface, Sequelize) {

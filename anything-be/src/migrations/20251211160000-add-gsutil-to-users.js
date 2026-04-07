@@ -2,14 +2,20 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn("users", "gs_util", {
-      type: Sequelize.TEXT,
-      allowNull: true,
-      defaultValue: null,
-    });
+    const columns = await queryInterface.describeTable("users");
+    if (!columns.gs_util) {
+      await queryInterface.addColumn("users", "gs_util", {
+        type: Sequelize.TEXT,
+        allowNull: true,
+        defaultValue: null,
+      });
+    }
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.removeColumn("users", "gs_util");
+    const columns = await queryInterface.describeTable("users");
+    if (columns.gs_util) {
+      await queryInterface.removeColumn("users", "gs_util");
+    }
   },
 };

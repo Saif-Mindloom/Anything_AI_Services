@@ -2,11 +2,14 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn("outfits", "accessory_ids", {
-      type: Sequelize.ARRAY(Sequelize.INTEGER),
-      allowNull: false,
-      defaultValue: [],
-    });
+    const columns = await queryInterface.describeTable("outfits");
+    if (!columns.accessory_ids) {
+      await queryInterface.addColumn("outfits", "accessory_ids", {
+        type: Sequelize.ARRAY(Sequelize.INTEGER),
+        allowNull: false,
+        defaultValue: [],
+      });
+    }
 
     await queryInterface.sequelize.query(`
       UPDATE outfits o
@@ -25,6 +28,9 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.removeColumn("outfits", "accessory_ids");
+    const columns = await queryInterface.describeTable("outfits");
+    if (columns.accessory_ids) {
+      await queryInterface.removeColumn("outfits", "accessory_ids");
+    }
   },
 };

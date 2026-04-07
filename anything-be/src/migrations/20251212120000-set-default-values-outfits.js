@@ -2,11 +2,21 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const columns = await queryInterface.describeTable("outfits");
+
     // Drop foreign key constraints first
-    await queryInterface.removeConstraint("outfits", "outfits_top_id_fkey");
-    await queryInterface.removeConstraint("outfits", "outfits_bottom_id_fkey");
-    await queryInterface.removeConstraint("outfits", "outfits_shoe_id_fkey");
-    await queryInterface.removeConstraint("outfits", "outfits_dress_id_fkey");
+    await queryInterface.sequelize.query(
+      'ALTER TABLE "outfits" DROP CONSTRAINT IF EXISTS "outfits_top_id_fkey";'
+    );
+    await queryInterface.sequelize.query(
+      'ALTER TABLE "outfits" DROP CONSTRAINT IF EXISTS "outfits_bottom_id_fkey";'
+    );
+    await queryInterface.sequelize.query(
+      'ALTER TABLE "outfits" DROP CONSTRAINT IF EXISTS "outfits_shoe_id_fkey";'
+    );
+    await queryInterface.sequelize.query(
+      'ALTER TABLE "outfits" DROP CONSTRAINT IF EXISTS "outfits_dress_id_fkey";'
+    );
 
     // Update existing null values to 0
     await queryInterface.sequelize.query(
@@ -18,9 +28,11 @@ module.exports = {
     await queryInterface.sequelize.query(
       `UPDATE outfits SET shoe_id = 0 WHERE shoe_id IS NULL`
     );
-    await queryInterface.sequelize.query(
-      `UPDATE outfits SET dress_id = 0 WHERE dress_id IS NULL`
-    );
+    if (columns.dress_id) {
+      await queryInterface.sequelize.query(
+        `UPDATE outfits SET dress_id = 0 WHERE dress_id IS NULL`
+      );
+    }
 
     // Change columns to NOT NULL with default 0
     await queryInterface.changeColumn("outfits", "top_id", {
@@ -41,11 +53,13 @@ module.exports = {
       defaultValue: 0,
     });
 
-    await queryInterface.changeColumn("outfits", "dress_id", {
-      type: Sequelize.INTEGER,
-      allowNull: false,
-      defaultValue: 0,
-    });
+    if (columns.dress_id) {
+      await queryInterface.changeColumn("outfits", "dress_id", {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      });
+    }
   },
 
   async down(queryInterface, Sequelize) {
