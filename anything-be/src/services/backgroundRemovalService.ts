@@ -8,6 +8,11 @@ export interface BackgroundRemovalOptions {
 const USE_BIREFNET = process.env.USE_BIREFNET !== "false"; // Default to true
 const BIREFNET_SERVICE_URL =
   process.env.BIREFNET_SERVICE_URL || "http://localhost:8000";
+const BIREFNET_TIMEOUT_MS = Number(process.env.BIREFNET_TIMEOUT_MS || 240000); // 4 minutes
+const BIREFNET_MAX_INPUT_DIMENSION = Number(
+  process.env.BIREFNET_MAX_INPUT_DIMENSION || 1536,
+);
+const BIREFNET_JPEG_QUALITY = Number(process.env.BIREFNET_JPEG_QUALITY || 82);
 const REMOVEBG_API_KEY = process.env.REMOVEBG_API_KEY;
 const REMOVEBG_API_URL = "https://api.remove.bg/v1.0/removebg";
 
@@ -40,20 +45,21 @@ async function removeBackgroundBiRefNet(
       ? base64Image.split(",")[1]
       : base64Image;
 
+    const optimizedBase64Data = await optimizeImageForBiRefNet(base64Data);
     console.log(
       `🔄 Sending image to BiRefNet service (size: ${Math.round(
-        base64Data.length / 1024,
-      )}KB)`,
+        optimizedBase64Data.length / 1024,
+      )}KB, timeout: ${BIREFNET_TIMEOUT_MS}ms)`,
     );
 
     // Call BiRefNet service
     const response = await axios.post(
       `${BIREFNET_SERVICE_URL}/remove-background-base64`,
       {
-        image_data: base64Data,
+        image_data: optimizedBase64Data,
       },
       {
-        timeout: 120000, // 2 minutes timeout
+        timeout: BIREFNET_TIMEOUT_MS,
         headers: {
           "Content-Type": "application/json",
         },
@@ -87,6 +93,42 @@ async function removeBackgroundBiRefNet(
     }
 
     throw new Error(`BiRefNet background removal failed: ${error.message}`);
+  }
+}
+
+/**
+ * Reduce image payload before sending to BiRefNet to avoid request timeouts.
+ */
+async function optimizeImageForBiRefNet(base64Data: string): Promise<string> {
+  try {
+    const sharp = require("sharp");
+    const inputBuffer = Buffer.from(base64Data, "base64");
+    const metadata = await sharp(inputBuffer).metadata();
+    const width = metadata.width || BIREFNET_MAX_INPUT_DIMENSION;
+    const height = metadata.height || BIREFNET_MAX_INPUT_DIMENSION;
+    const largestEdge = Math.max(width, height);
+
+    const pipeline = sharp(inputBuffer, { failOn: "none" }).rotate();
+    if (largestEdge > BIREFNET_MAX_INPUT_DIMENSION) {
+      pipeline.resize({
+        width:
+          width >= height ? BIREFNET_MAX_INPUT_DIMENSION : undefined,
+        height:
+          height > width ? BIREFNET_MAX_INPUT_DIMENSION : undefined,
+        fit: "inside",
+        withoutEnlargement: true,
+      });
+    }
+
+    const optimizedBuffer = await pipeline
+      .jpeg({ quality: BIREFNET_JPEG_QUALITY, mozjpeg: true })
+      .toBuffer();
+
+    return optimizedBuffer.toString("base64");
+  } catch (error) {
+    // If optimization fails, continue with original payload.
+    console.warn("⚠️ BiRefNet optimization failed; sending original image");
+    return base64Data;
   }
 }
 
