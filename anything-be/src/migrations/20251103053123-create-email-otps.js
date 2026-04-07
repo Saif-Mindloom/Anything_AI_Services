@@ -44,8 +44,8 @@ module.exports = {
     // Add index on email for faster lookups
     await queryInterface.addIndex("email_otps", ["email"]);
 
-    // Add index on expiresAt for cleanup queries
-    await queryInterface.addIndex("email_otps", ["expiresAt"]);
+    // Add index on expires_at for cleanup queries (snake_case in Postgres)
+    await queryInterface.addIndex("email_otps", ["expires_at"]);
   },
 
   async down(queryInterface, Sequelize) {
