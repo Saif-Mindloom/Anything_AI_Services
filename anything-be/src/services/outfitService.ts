@@ -465,7 +465,10 @@ const collectGcsUrisFromImageList = (imageList: unknown): string[] => {
   const out: string[] = [];
   for (const v of Object.values(imageList as Record<string, unknown>)) {
     if (typeof v === "string") {
-      if (v.startsWith("https://storage.googleapis.com/") || v.startsWith("gs://")) {
+      if (
+        v.startsWith("https://storage.googleapis.com/") ||
+        v.startsWith("gs://")
+      ) {
         out.push(v);
       }
     } else {
@@ -550,7 +553,9 @@ export const deleteOutfitMutation = async (
       };
     }
 
-    const accessories = await Accessory.findAll({ where: { outfitId: outfit.id } });
+    const accessories = await Accessory.findAll({
+      where: { outfitId: outfit.id },
+    });
 
     await deleteOutfitGcsAssets(user.userId, outfit.id, outfit, accessories);
 
@@ -559,12 +564,18 @@ export const deleteOutfitMutation = async (
         where: { outfitId: outfit.id },
         transaction: t,
       });
-      await AnythingPick.destroy({ where: { outfitId: outfit.id }, transaction: t });
+      await AnythingPick.destroy({
+        where: { outfitId: outfit.id },
+        transaction: t,
+      });
       await UsedAnythingPick.destroy({
         where: { outfitId: outfit.id },
         transaction: t,
       });
-      await Accessory.destroy({ where: { outfitId: outfit.id }, transaction: t });
+      await Accessory.destroy({
+        where: { outfitId: outfit.id },
+        transaction: t,
+      });
       await outfit.destroy({ transaction: t });
     });
 
@@ -1638,8 +1649,7 @@ ${gridDescriptions.join("\n")}
     // -------------------------------------------------------
     const { GoogleGenAI, Modality } = await import("@google/genai");
     const ai = new GoogleGenAI({
-      apiKey:
-        process.env.GEMINI_API_KEY || "AIzaSyD-dGOfFy8yS9l0LfgdK6rw8iSvudKHmik",
+      apiKey: process.env.GEMINI_API_KEY,
     });
 
     const maxRetries = 5;

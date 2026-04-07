@@ -148,7 +148,12 @@ async function standardizeClothingImage(
     );
 
     const croppedBuffer = await sharp(imageBuffer)
-      .extract({ left: cropLeft, top: cropTop, width: cropWidth, height: cropHeight })
+      .extract({
+        left: cropLeft,
+        top: cropTop,
+        width: cropWidth,
+        height: cropHeight,
+      })
       .toBuffer();
 
     // Fit inside target canvas maintaining aspect ratio
@@ -170,14 +175,16 @@ async function standardizeClothingImage(
       `   Placing ${resizedWidth}x${resizedHeight} at (${offsetX}, ${offsetY}) on ${targetWidth}x${targetHeight} canvas`,
     );
 
-    const standardizedBuffer = await (sharp({
-      create: {
-        width: targetWidth,
-        height: targetHeight,
-        channels: 4,
-        background: { r: 0, g: 0, b: 0, alpha: 0 },
-      },
-    }) as any)
+    const standardizedBuffer = await (
+      sharp({
+        create: {
+          width: targetWidth,
+          height: targetHeight,
+          channels: 4,
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        },
+      }) as any
+    )
       .composite([{ input: resizedBuffer, left: offsetX, top: offsetY }])
       .png()
       .toBuffer();
@@ -218,7 +225,7 @@ export interface ClothingIsolationResult {
 
 // Initialize Google AI client
 const ai = new GoogleGenAI({
-  apiKey: "AIzaSyD-dGOfFy8yS9l0LfgdK6rw8iSvudKHmik", // Should be moved to env variables
+  apiKey: process.env.GEMINI_API_KEY,
 });
 
 const model = "gemini-2.5-flash-image";
@@ -381,7 +388,7 @@ Return ONLY the final generated image in TRUE UPRIGHT PORTRAIT orientation showi
   const prompt = isOuterwear
     ? outerwearPrompt
     : isShoe
-    ? `Professional studio product photography for an e-commerce fashion label.
+      ? `Professional studio product photography for an e-commerce fashion label.
 
 *Goal:* Generate a high-resolution, photorealistic image of a PAIR of "${conceptName}s" as the sole subject.
 
@@ -420,7 +427,7 @@ Return ONLY the final generated image in TRUE UPRIGHT PORTRAIT orientation showi
 *Think of this scene: Two shoes are placed side by side on a photography studio floor. You are standing to the LEFT of the shoes, looking at them from a slight angle (30-45 degrees). You see the left side and front of both shoes. The camera is held upright in portrait mode. This is the view to generate.*
 
 Return ONLY the final generated image in UPRIGHT PORTRAIT orientation showing a pair of shoes with SOLES DOWN on the ground, viewed from a LEFT-CENTER angle.`
-    : `Professional studio product photography for an e-commerce fashion label.
+      : `Professional studio product photography for an e-commerce fashion label.
 
 *Goal:* Generate a high-resolution, photorealistic image of a COMPLETE "${conceptName}" as the sole subject, showing the ENTIRE garment from top to bottom.
 
@@ -520,7 +527,8 @@ function generateDescription(conceptName: string): string {
     tank: "A sleeveless tank top with a modern fit and clean lines",
     sweater: "A cozy sweater with textured knit and comfortable styling",
     cardigan: "A sophisticated cardigan with button-front closure",
-    outerwear: "A stylish outerwear piece — jacket, coat, or blazer — with tailored construction and contemporary design",
+    outerwear:
+      "A stylish outerwear piece — jacket, coat, or blazer — with tailored construction and contemporary design",
     jacket: "A structured jacket with tailored details and contemporary fit",
     coat: "An outerwear coat with protective design and stylish elements",
     dress: "A beautiful dress with flattering silhouette and elegant details",

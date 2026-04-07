@@ -15,8 +15,7 @@ import { centerAndStandardizeImage } from "../helpers/imageUtils";
 
 // Initialize Google Gen AI SDK with API key (not Vertex AI)
 const ai = new GoogleGenAI({
-  apiKey:
-    process.env.GEMINI_API_KEY || "AIzaSyD-dGOfFy8yS9l0LfgdK6rw8iSvudKHmik",
+  apiKey: process.env.GEMINI_API_KEY,
 });
 const gcpAuth = new GoogleAuth({
   scopes: [
