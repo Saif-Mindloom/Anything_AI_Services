@@ -201,6 +201,10 @@ router.post(
       return res.status(202).json({
         success: true,
         jobId: jobId,
+        queueName:
+          uploadedFiles.length === 1
+            ? "clothingDetection"
+            : "clothingDetectionBatch",
         message: `Job created successfully. Processing ${
           uploadedFiles.length
         } image${uploadedFiles.length > 1 ? "s" : ""}.`,

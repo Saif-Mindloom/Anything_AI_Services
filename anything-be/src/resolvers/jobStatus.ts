@@ -21,6 +21,64 @@ const queues = {
   accessoryGeneration: accessoryGenerationQueue,
 };
 
+type QueueName = keyof typeof queues;
+
+function extractJobUserId(job: any): string | null {
+  const fromData =
+    job?.data?.userId ??
+    job?.data?.user_id ??
+    job?.data?.user?.id ??
+    job?.data?.user?.userId;
+  return fromData === undefined || fromData === null ? null : String(fromData);
+}
+
+async function findJobForUser(
+  jobId: string,
+  authUserId: string,
+  preferredQueueName?: string,
+): Promise<{ job: any; queueName: QueueName } | null> {
+  const preferredQueue =
+    preferredQueueName && preferredQueueName in queues
+      ? (preferredQueueName as QueueName)
+      : null;
+
+  if (preferredQueue) {
+    const job = await queues[preferredQueue].getJob(jobId);
+    if (job) {
+      const jobUserId = extractJobUserId(job);
+      if (!jobUserId || jobUserId === authUserId) {
+        return { job, queueName: preferredQueue };
+      }
+    }
+  }
+
+  const matches: Array<{ job: any; queueName: QueueName; rank: number }> = [];
+  for (const [name, queue] of Object.entries(queues) as Array<
+    [QueueName, (typeof queues)[QueueName]]
+  >) {
+    const foundJob = await queue.getJob(jobId);
+    if (!foundJob) continue;
+    const jobUserId = extractJobUserId(foundJob);
+    if (jobUserId && jobUserId !== authUserId) continue;
+
+    const state = await foundJob.getState();
+    // Prefer active/waiting jobs over completed/failed when IDs collide across queues.
+    const rank =
+      state === "active" || state === "waiting" || state === "waiting-children"
+        ? 3
+        : state === "delayed"
+          ? 2
+          : state === "completed" || state === "failed"
+            ? 1
+            : 0;
+    matches.push({ job: foundJob, queueName: name, rank });
+  }
+
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => b.rank - a.rank || (b.job.timestamp || 0) - (a.job.timestamp || 0));
+  return { job: matches[0].job, queueName: matches[0].queueName };
+}
+
 /**
  * Helper function to group apparels by original uploaded image
  */
@@ -109,25 +167,19 @@ router.get("/job-status/:jobId", async (req, res) => {
 
     const { jobId } = req.params;
 
-    // Try to find the job in all queues
-    let job = null;
-    let queueName = null;
+    const found = await findJobForUser(
+      jobId,
+      String(userFromToken.userId),
+      req.query.queueName as string | undefined,
+    );
 
-    for (const [name, queue] of Object.entries(queues)) {
-      const foundJob = await queue.getJob(jobId);
-      if (foundJob) {
-        job = foundJob;
-        queueName = name;
-        break;
-      }
-    }
-
-    if (!job) {
+    if (!found) {
       return res.status(404).json({
         success: false,
         message: "Job not found",
       });
     }
+    const { job, queueName } = found;
 
     // Get job state and details
     const state = await job.getState();
@@ -268,25 +320,19 @@ router.get("/jobs/:jobId/status", async (req, res) => {
 
     const { jobId } = req.params;
 
-    // Try to find the job in all queues
-    let job = null;
-    let queueName = null;
+    const found = await findJobForUser(
+      jobId,
+      String(userFromToken.userId),
+      req.query.queueName as string | undefined,
+    );
 
-    for (const [name, queue] of Object.entries(queues)) {
-      const foundJob = await queue.getJob(jobId);
-      if (foundJob) {
-        job = foundJob;
-        queueName = name;
-        break;
-      }
-    }
-
-    if (!job) {
+    if (!found) {
       return res.status(404).json({
         success: false,
         message: "Job not found",
       });
     }
+    const { job, queueName } = found;
 
     // Get job state and details
     const state = await job.getState();
@@ -438,26 +484,19 @@ router.post("/job-status/bulk", async (req, res) => {
     const results = await Promise.all(
       jobIds.map(async (jobId) => {
         try {
-          // Try to find the job in all queues
-          let job = null;
-          let queueName = null;
-
-          for (const [name, queue] of Object.entries(queues)) {
-            const foundJob = await queue.getJob(jobId);
-            if (foundJob) {
-              job = foundJob;
-              queueName = name;
-              break;
-            }
-          }
-
-          if (!job) {
+          const found = await findJobForUser(
+            jobId,
+            String(userFromToken.userId),
+            req.body?.queueName,
+          );
+          if (!found) {
             return {
               jobId,
               found: false,
               message: "Job not found",
             };
           }
+          const { job, queueName } = found;
 
           const state = await job.getState();
           const progress = job.progress || 0;
