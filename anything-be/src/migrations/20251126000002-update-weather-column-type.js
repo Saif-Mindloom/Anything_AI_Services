@@ -2,23 +2,34 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // Step 1: Add a temporary column with integer type
-    await queryInterface.addColumn("calendar_entries", "weather_temp", {
-      type: Sequelize.INTEGER,
-      allowNull: true,
-    });
+    const columns = await queryInterface.describeTable("calendar_entries");
+
+    // If weather is already an integer and temp column is absent, migration has effectively been applied.
+    if (columns.weather && columns.weather.type && String(columns.weather.type).includes("INTEGER") && !columns.weather_temp) {
+      console.log("Weather column is already integer; skipping migration");
+      return;
+    }
+
+    // Step 1: Add a temporary column with integer type (idempotent for partial runs)
+    if (!columns.weather_temp) {
+      await queryInterface.addColumn("calendar_entries", "weather_temp", {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+      });
+    }
 
     // Step 2: Set default temperature values for existing string weather data
     await queryInterface.sequelize.query(`
       UPDATE calendar_entries 
       SET weather_temp = CASE 
-        WHEN weather = 'sunny' OR weather = 'clear' THEN 25
-        WHEN weather = 'cloudy' THEN 20
-        WHEN weather = 'rainy' THEN 15
-        WHEN weather = 'windy' THEN 18
-        WHEN weather = 'snowy' THEN 0
-        WHEN weather = 'hot' THEN 35
-        WHEN weather = 'cold' THEN 5
+        WHEN LOWER(weather::text) = 'sunny' OR LOWER(weather::text) = 'clear' THEN 25
+        WHEN LOWER(weather::text) = 'cloudy' THEN 20
+        WHEN LOWER(weather::text) = 'rainy' THEN 15
+        WHEN LOWER(weather::text) = 'windy' THEN 18
+        WHEN LOWER(weather::text) = 'snowy' THEN 0
+        WHEN LOWER(weather::text) = 'hot' THEN 35
+        WHEN LOWER(weather::text) = 'cold' THEN 5
+        WHEN weather::text ~ '^-?\\d+$' THEN CAST(weather::text AS INTEGER)
         ELSE 22
       END
       WHERE weather IS NOT NULL;
