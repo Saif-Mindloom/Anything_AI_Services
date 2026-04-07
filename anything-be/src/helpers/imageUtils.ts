@@ -1,5 +1,18 @@
 import sharp from "sharp";
 
+function shouldSaveDebugImagesByDefault(): boolean {
+  // Prefer a VTO-specific switch when provided.
+  if (typeof process.env.VTO_SAVE_DEBUG_IMAGES === "string") {
+    return process.env.VTO_SAVE_DEBUG_IMAGES === "true";
+  }
+  // Fallback to existing global debug flag used elsewhere.
+  if (typeof process.env.SAVE_DEBUG_IMAGES === "string") {
+    return process.env.SAVE_DEBUG_IMAGES === "true";
+  }
+  // Preserve existing behavior when no env is configured.
+  return true;
+}
+
 async function drawDebugBoundingBoxes(
   imageBuffer: Buffer,
   minX: number,
@@ -116,9 +129,11 @@ export async function centerAndStandardizeImage(
   imageBuffer: Buffer,
   targetWidth: number = 1024,
   targetHeight: number = 1536,
-  saveDebugImage: boolean = true,
+  saveDebugImage?: boolean,
 ): Promise<Buffer> {
   try {
+    const shouldSaveDebugImage =
+      saveDebugImage ?? shouldSaveDebugImagesByDefault();
     const image = sharp(imageBuffer);
     const metadata = await image.metadata();
 
@@ -179,7 +194,7 @@ export async function centerAndStandardizeImage(
       `   Person will be resized to fit within this box while maintaining aspect ratio`,
     );
 
-    if (saveDebugImage) {
+    if (shouldSaveDebugImage) {
       try {
         const debugImageBuffer = await drawDebugBoundingBoxes(
           imageBuffer,
