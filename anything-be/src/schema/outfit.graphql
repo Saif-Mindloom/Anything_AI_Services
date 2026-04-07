@@ -127,6 +127,11 @@ type ToggleFavouriteResult {
   isFavourite: Boolean!
 }
 
+type DeleteOutfitResult {
+  success: Boolean!
+  message: String!
+}
+
 type GenerateOutfitCompositeResult {
   success: Boolean!
   message: String!
@@ -150,6 +155,7 @@ extend type Mutation {
     backAngleAvailability: BackAngleAvailabilityInput
   ): QueueOutfitAnglesResult!
   toggleOutfitFavourite(outfitId: BigInt!): ToggleFavouriteResult!
+  deleteOutfit(outfitId: BigInt!): DeleteOutfitResult!
   generateAccessories(outfitId: BigInt!): GenerateAccessoriesResult!
   shuffleOutfit(
     topId: Int

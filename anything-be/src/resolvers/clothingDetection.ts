@@ -54,6 +54,7 @@ router.post(
   "/detect-and-crop-clothing/async",
   smartImageUpload,
   async (req, res) => {
+    const addItemsApiStart = Date.now();
     try {
       // Authentication
       const authHeader = req.headers?.authorization;
@@ -131,6 +132,7 @@ router.post(
 
       // Upload all files to GCS
       console.log(`📤 Uploading ${uploadedFiles.length} image(s) to GCS...`);
+      const gcsPhaseStart = Date.now();
       await gcsService.ensureUserFolderExists(userId);
 
       const imageUrls: Array<{
@@ -139,29 +141,34 @@ router.post(
         mimetype: string;
       }> = [];
 
-      for (const uploadedFile of uploadedFiles) {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const fileName = `temp-clothing-${timestamp}-${uploadedFile.originalname}`;
+      const uploadResults = await Promise.all(
+        uploadedFiles.map(async (uploadedFile) => {
+          const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+          const fileName = `temp-clothing-${timestamp}-${uploadedFile.originalname}`;
 
-        const uploadResult = await gcsService.uploadFile(
-          uploadedFile.buffer,
-          fileName,
-          userId,
-          "Clothing/Temp",
-          uploadedFile.mimetype,
-        );
+          const uploadResult = await gcsService.uploadFile(
+            uploadedFile.buffer,
+            fileName,
+            userId,
+            "Clothing/Temp",
+            uploadedFile.mimetype,
+          );
 
-        imageUrls.push({
-          url: uploadResult.httpUrl,
-          fileName: uploadedFile.originalname,
-          mimetype: uploadedFile.mimetype,
-        });
-      }
+          return {
+            url: uploadResult.httpUrl,
+            fileName: uploadedFile.originalname,
+            mimetype: uploadedFile.mimetype,
+          };
+        }),
+      );
+      imageUrls.push(...uploadResults);
+      const tGcsUploadMs = Date.now() - gcsPhaseStart;
 
       console.log(`✅ All images uploaded to GCS`);
 
       // Create job and return immediately
       let jobId: string;
+      const enqueueStart = Date.now();
 
       if (uploadedFiles.length === 1) {
         // Single image
@@ -178,6 +185,13 @@ router.post(
           imageUrls: imageUrls,
         });
       }
+      const tEnqueueMs = Date.now() - enqueueStart;
+      const addItemsApiTotalMs = Date.now() - addItemsApiStart;
+      const mode =
+        uploadedFiles.length === 1 ? "single_queue" : "batch_queue";
+      console.log(
+        `📊 Add-items API (async): user=${userId} images=${uploadedFiles.length} mode=${mode} t_gcs_upload_ms=${tGcsUploadMs} t_enqueue_ms=${tEnqueueMs} total_ms=${addItemsApiTotalMs} jobId=${jobId}`,
+      );
 
       console.log(
         `✅ [ASYNC] Job created with ID: ${jobId} (${uploadedFiles.length} image(s))`,

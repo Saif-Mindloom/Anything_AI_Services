@@ -280,6 +280,34 @@ export const deleteFileByUri = async (uri: string): Promise<void> => {
 };
 
 /**
+ * Delete all GCS objects whose object name starts with `prefix`.
+ * Prefix must begin with a numeric user folder (`{userId}/`) to avoid broad accidental deletes.
+ */
+export const deleteFilesByPrefix = async (prefix: string): Promise<void> => {
+  if (!prefix || !/^\d+\//.test(prefix)) {
+    console.warn(`[GCS] Refusing deletion: prefix must start with userId/, got: ${prefix}`);
+    return;
+  }
+  try {
+    const { storage, bucketName } = getGCSInstances();
+    const bucket = storage.bucket(bucketName);
+
+    const [files] = await bucket.getFiles({ prefix });
+    if (files.length === 0) {
+      return;
+    }
+    await Promise.all(files.map((f) => f.delete()));
+    console.log(`[GCS] Deleted ${files.length} file(s) under prefix: ${prefix}`);
+  } catch (err) {
+    console.error(
+      `[GCS] Failed to delete files under prefix ${prefix}:`,
+      err instanceof Error ? err.message : err,
+    );
+    throw err;
+  }
+};
+
+/**
  * Delete every GCS object that lives under a user's folder ({userId}/).
  * This wipes all avatars, apparel images, outfit composites, accessories etc.
  */
@@ -316,5 +344,6 @@ export const gcsService = {
   uploadBase64Image,
   ensureUserFolderExists,
   deleteFileByUri,
+  deleteFilesByPrefix,
   deleteUserFolder,
 };

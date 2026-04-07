@@ -20,6 +20,7 @@ services:
       REDIS_PORT: 6379
       # Gemini API Configuration
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      VTO_USE_FILEDATA: ${VTO_USE_FILEDATA:-false}
       # Remove.bg API Configuration
       REMOVEBG_API_KEY: ${REMOVEBG_API_KEY}
       PAT: ${PAT}

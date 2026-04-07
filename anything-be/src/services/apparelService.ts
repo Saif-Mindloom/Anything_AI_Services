@@ -139,6 +139,62 @@ export interface ClothingMapping {
     | "other";
 }
 
+const classifyDetectedItem = (
+  conceptName: string,
+  keepOuterwearCategory: boolean = false,
+): {
+  category: "top" | "bottom" | "shoe" | "accessory" | "outerwear" | "dress";
+  subcategory: string;
+} => {
+  const lowerConcept = conceptName.toLowerCase();
+  let category: "top" | "bottom" | "shoe" | "accessory" | "outerwear" | "dress" =
+    "accessory";
+  let subcategory = "other";
+
+  if (lowerConcept.includes("dress")) {
+    category = "dress";
+  } else if (
+    lowerConcept.includes("jacket") ||
+    lowerConcept.includes("coat") ||
+    lowerConcept.includes("blazer") ||
+    lowerConcept === "outerwear" ||
+    lowerConcept.includes("outerwear")
+  ) {
+    category = keepOuterwearCategory ? "outerwear" : "top";
+    subcategory = lowerConcept.includes("coat") ? "coat" : "jacket";
+  } else if (
+    lowerConcept.includes("shirt") ||
+    lowerConcept.includes("blouse") ||
+    lowerConcept.includes("t-shirt") ||
+    lowerConcept.includes("tank") ||
+    lowerConcept.includes("top") ||
+    lowerConcept.includes("sweater") ||
+    lowerConcept.includes("cardigan")
+  ) {
+    category = "top";
+    subcategory = lowerConcept.includes("shirt") ? "shirt" : "tshirt";
+  } else if (
+    lowerConcept.includes("jean") ||
+    lowerConcept.includes("pants") ||
+    lowerConcept.includes("short") ||
+    lowerConcept.includes("skirt") ||
+    lowerConcept.includes("trouser")
+  ) {
+    category = "bottom";
+    subcategory = lowerConcept.includes("jean") ? "jeans" : "shorts";
+  } else if (
+    lowerConcept.includes("shoe") ||
+    lowerConcept.includes("sneaker") ||
+    lowerConcept.includes("heel") ||
+    lowerConcept.includes("boot")
+  ) {
+    category = "shoe";
+    subcategory = lowerConcept.includes("heel") ? "heels" : "sneakers";
+  }
+
+  return { category, subcategory };
+};
+
 export const mapConceptToClothingType = (
   conceptName: string,
 ): ClothingMapping => {
@@ -337,54 +393,7 @@ export const createApparelFromCroppedItem = async (
     // Keep the original concept name instead of converting categories
     const conceptName = croppedItem.conceptName;
 
-    // Use a simple category mapping that preserves more of the original information
-    let category:
-      | "top"
-      | "bottom"
-      | "shoe"
-      | "accessory"
-      | "outerwear"
-      | "dress" = "accessory";
-    let subcategory: string = "other";
-
-    const lowerConcept = conceptName.toLowerCase();
-
-    // Check for dress first (takes priority)
-    if (lowerConcept.includes("dress")) {
-      category = "dress";
-    } else if (
-      lowerConcept.includes("shirt") ||
-      lowerConcept.includes("blouse") ||
-      lowerConcept.includes("t-shirt") ||
-      lowerConcept.includes("tank") ||
-      lowerConcept.includes("top") ||
-      lowerConcept.includes("sweater") ||
-      lowerConcept.includes("cardigan")
-    ) {
-      category = "top";
-    } else if (
-      lowerConcept.includes("jean") ||
-      lowerConcept.includes("pants") ||
-      lowerConcept.includes("short") ||
-      lowerConcept.includes("skirt") ||
-      lowerConcept.includes("trouser")
-    ) {
-      category = "bottom";
-    } else if (
-      lowerConcept.includes("shoe") ||
-      lowerConcept.includes("sneaker") ||
-      lowerConcept.includes("heel") ||
-      lowerConcept.includes("boot")
-    ) {
-      category = "shoe";
-    } else if (
-      lowerConcept.includes("jacket") ||
-      lowerConcept.includes("coat") ||
-      lowerConcept.includes("blazer") ||
-      lowerConcept.includes("outerwear")
-    ) {
-      category = "top"; // Outerwear is treated as top
-    }
+    const { category, subcategory } = classifyDetectedItem(conceptName, false);
 
     // Skip accessories - return null to filter them out
     if (category === "accessory") {
@@ -466,52 +475,7 @@ const prepareApparelDataFromCroppedItem = async (
   try {
     const conceptName = croppedItem.conceptName;
 
-    // Determine category
-    let category:
-      | "top"
-      | "bottom"
-      | "shoe"
-      | "accessory"
-      | "outerwear"
-      | "dress" = "accessory";
-    let subcategory: string = "other";
-    const lowerConcept = conceptName.toLowerCase();
-
-    if (lowerConcept.includes("dress")) {
-      category = "dress";
-    } else if (
-      lowerConcept.includes("shirt") ||
-      lowerConcept.includes("blouse") ||
-      lowerConcept.includes("t-shirt") ||
-      lowerConcept.includes("tank") ||
-      lowerConcept.includes("top") ||
-      lowerConcept.includes("sweater") ||
-      lowerConcept.includes("cardigan")
-    ) {
-      category = "top";
-    } else if (
-      lowerConcept.includes("jean") ||
-      lowerConcept.includes("pants") ||
-      lowerConcept.includes("short") ||
-      lowerConcept.includes("skirt") ||
-      lowerConcept.includes("trouser")
-    ) {
-      category = "bottom";
-    } else if (
-      lowerConcept.includes("shoe") ||
-      lowerConcept.includes("sneaker") ||
-      lowerConcept.includes("heel") ||
-      lowerConcept.includes("boot")
-    ) {
-      category = "shoe";
-    } else if (
-      lowerConcept.includes("jacket") ||
-      lowerConcept.includes("coat") ||
-      lowerConcept.includes("blazer") ||
-      lowerConcept.includes("outerwear")
-    ) {
-      category = "top";
-    }
+    const { category, subcategory } = classifyDetectedItem(conceptName, false);
 
     // Skip accessories
     if (category === "accessory") {
@@ -594,52 +558,7 @@ const prepareApparelDataFromCroppedItemWithOuterwear = async (
   try {
     const conceptName = croppedItem.conceptName;
 
-    let category:
-      | "top"
-      | "bottom"
-      | "shoe"
-      | "accessory"
-      | "outerwear"
-      | "dress" = "accessory";
-    let subcategory: string = "other";
-    const lowerConcept = conceptName.toLowerCase();
-
-    if (lowerConcept.includes("dress")) {
-      category = "dress";
-    } else if (
-      lowerConcept.includes("jacket") ||
-      lowerConcept.includes("coat") ||
-      lowerConcept.includes("blazer") ||
-      lowerConcept === "outerwear" ||
-      lowerConcept.includes("outerwear")
-    ) {
-      category = "outerwear";
-    } else if (
-      lowerConcept.includes("shirt") ||
-      lowerConcept.includes("blouse") ||
-      lowerConcept.includes("t-shirt") ||
-      lowerConcept.includes("tank") ||
-      lowerConcept.includes("top") ||
-      lowerConcept.includes("sweater") ||
-      lowerConcept.includes("cardigan")
-    ) {
-      category = "top";
-    } else if (
-      lowerConcept.includes("jean") ||
-      lowerConcept.includes("pants") ||
-      lowerConcept.includes("short") ||
-      lowerConcept.includes("skirt") ||
-      lowerConcept.includes("trouser")
-    ) {
-      category = "bottom";
-    } else if (
-      lowerConcept.includes("shoe") ||
-      lowerConcept.includes("sneaker") ||
-      lowerConcept.includes("heel") ||
-      lowerConcept.includes("boot")
-    ) {
-      category = "shoe";
-    }
+    const { category, subcategory } = classifyDetectedItem(conceptName, true);
 
     if (category === "accessory") {
       console.log(`⏭️  Skipping accessory item: ${conceptName}`);

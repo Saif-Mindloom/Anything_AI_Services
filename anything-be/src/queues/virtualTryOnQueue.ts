@@ -8,14 +8,66 @@ import { removeBackgroundFromBase64 } from "../services/backgroundRemovalService
 import { GoogleGenAI, Modality } from "@google/genai";
 import sharp from "sharp";
 import { Op } from "sequelize";
+import { createHash } from "crypto";
+import { GoogleAuth } from "google-auth-library";
 import { generateOutfitSummary } from "../services/accessoryGenerationService";
 import { centerAndStandardizeImage } from "../helpers/imageUtils";
 
 // Initialize Google Gen AI SDK with API key (not Vertex AI)
 const ai = new GoogleGenAI({
   apiKey:
-    process.env.GEMINI_API_KEY || "AIzaSyB_m0qCgrF1GGFXnY7DmOEXHwDtnBVEhlY",
+    process.env.GEMINI_API_KEY || "AIzaSyD-dGOfFy8yS9l0LfgdK6rw8iSvudKHmik",
 });
+const gcpAuth = new GoogleAuth({
+  scopes: [
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/generative-language",
+  ],
+});
+const useFileDataForVto = process.env.VTO_USE_FILEDATA === "true";
+const useFileDataStrictForVto = process.env.VTO_FILEDATA_STRICT === "true";
+
+const vtoTimingSamples: Record<string, number[]> = {
+  t_model_fetch: [],
+  t_garment_fetch: [],
+  t_filedata_uri_resolve: [],
+  t_inline_fallback_prep: [],
+  t_gemini_generate: [],
+  t_bg_remove: [],
+  t_center: [],
+  t_upload: [],
+  total: [],
+};
+
+function percentile(values: number[], p: number): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.floor((p / 100) * sorted.length)),
+  );
+  return sorted[idx];
+}
+
+function recordTiming(metric: keyof typeof vtoTimingSamples, ms: number): void {
+  const arr = vtoTimingSamples[metric];
+  arr.push(ms);
+  if (arr.length > 200) arr.shift();
+}
+
+function logTimingSummary(jobId: string | number): void {
+  const snapshot = Object.entries(vtoTimingSamples)
+    .map(([metric, values]) => {
+      if (!values.length) return null;
+      return `${metric}: p50=${percentile(values, 50).toFixed(0)}ms p95=${percentile(values, 95).toFixed(0)}ms p99=${percentile(values, 99).toFixed(0)}ms`;
+    })
+    .filter(Boolean)
+    .join(" | ");
+
+  if (snapshot) {
+    console.log(`📊 VTO timing summary after job ${jobId} -> ${snapshot}`);
+  }
+}
 
 // ============================================
 // Queue Definition
@@ -39,6 +91,162 @@ async function downloadAndConvertToBase64(httpUrl: string): Promise<string> {
   const arrayBuffer = await response.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
   return buffer.toString("base64");
+}
+
+function inferMimeTypeFromUrl(url: string): string {
+  const lower = url.toLowerCase();
+  if (lower.includes(".png")) return "image/png";
+  if (lower.includes(".webp")) return "image/webp";
+  if (lower.includes(".jpg") || lower.includes(".jpeg")) return "image/jpeg";
+  return "image/jpeg";
+}
+
+function toGsUriFromHttpUrl(httpOrGsUrl: string): string {
+  if (httpOrGsUrl.startsWith("gs://")) return httpOrGsUrl;
+  const gcsHttpPrefix = "https://storage.googleapis.com/";
+  if (httpOrGsUrl.startsWith(gcsHttpPrefix)) {
+    const objectPath = httpOrGsUrl.slice(gcsHttpPrefix.length);
+    const firstSlashIdx = objectPath.indexOf("/");
+    if (firstSlashIdx > 0 && firstSlashIdx < objectPath.length - 1) {
+      const bucketName = objectPath.slice(0, firstSlashIdx);
+      const key = objectPath.slice(firstSlashIdx + 1);
+      return `gs://${bucketName}/${key}`;
+    }
+  }
+  throw new Error(`URL is not a supported GCS object URL: ${httpOrGsUrl}`);
+}
+
+async function resolveGeminiFileUriFromSource(
+  sourceUrl: string,
+  mimeType: string,
+): Promise<{
+  uri: string;
+  method: "registerFiles" | "upload" | "cache";
+  elapsedMs: number;
+  fallbackReason?: string;
+}> {
+  const startedAt = Date.now();
+  const cacheKey = `vto:gemini-file-uri:${createHash("sha256")
+    .update(`${sourceUrl}|${mimeType}`)
+    .digest("hex")}`;
+  const cacheTtlSeconds = parseInt(
+    process.env.VTO_GEMINI_FILE_URI_CACHE_TTL_SECONDS || "604800",
+    10,
+  );
+
+  try {
+    const cachedUri = await redisConnection.get(cacheKey);
+    if (cachedUri) {
+      return {
+        uri: cachedUri,
+        method: "cache",
+        elapsedMs: Date.now() - startedAt,
+      };
+    }
+  } catch {
+    // non-fatal cache read failure
+  }
+
+  let uri: string | undefined;
+  let method: "registerFiles" | "upload" | undefined;
+  let fallbackReason: string | undefined;
+  try {
+    const gsUri = toGsUriFromHttpUrl(sourceUrl);
+    const authClient = await gcpAuth.getClient();
+    const registered = await ai.files.registerFiles({
+      uris: [gsUri],
+      auth: authClient,
+    });
+    uri = registered?.files?.[0]?.uri;
+    if (uri) method = "registerFiles";
+    if (!uri) {
+      fallbackReason =
+        "registerFiles returned no URI, falling back to files.upload";
+    }
+  } catch (registerError: any) {
+    // Fall back to upload for SDK/configs where registerFiles is unavailable/fails.
+    fallbackReason = `registerFiles failed: ${
+      registerError?.message || "Unknown error"
+    }`;
+  }
+
+  if (!uri) {
+    const response = await fetch(sourceUrl);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to download source image for Gemini file upload: ${response.status} ${response.statusText}`,
+      );
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: mimeType });
+    const uploaded = await ai.files.upload({
+      file: blob,
+      config: { mimeType },
+    });
+    uri = uploaded?.uri;
+    if (uri) method = "upload";
+  }
+
+  if (!uri) {
+    throw new Error("Could not resolve Gemini file URI from source image");
+  }
+
+  try {
+    await redisConnection.set(cacheKey, uri, "EX", cacheTtlSeconds);
+  } catch {
+    // non-fatal cache write failure
+  }
+
+  return {
+    uri,
+    method: method || "upload",
+    elapsedMs: Date.now() - startedAt,
+    fallbackReason,
+  };
+}
+
+async function getOrCreateBaseModelBase64(
+  userId: number,
+  modelImageUrl: string,
+  job: Job,
+): Promise<string> {
+  const cacheKey = `vto:model-base64:${userId}:${createHash("sha256")
+    .update(modelImageUrl)
+    .digest("hex")}`;
+  const cacheTtlSeconds = parseInt(
+    process.env.VTO_BASE_MODEL_CACHE_TTL_SECONDS || "604800",
+    10,
+  ); // default: 7 days
+
+  try {
+    const cachedImageBase64 = await redisConnection.get(cacheKey);
+    if (cachedImageBase64) {
+      await job.log("Model image cache hit (Redis)");
+      return cachedImageBase64;
+    }
+  } catch (redisReadError: any) {
+    await job.log(
+      `Model image Redis read failed, falling back to download: ${
+        redisReadError?.message || "Unknown Redis error"
+      }`,
+    );
+  }
+
+  await job.log("Model image cache miss (Redis) - downloading");
+  const imageBase64 = await downloadAndConvertToBase64(modelImageUrl);
+
+  try {
+    await redisConnection.set(cacheKey, imageBase64, "EX", cacheTtlSeconds);
+    await job.log(`Model image cached in Redis (TTL: ${cacheTtlSeconds}s)`);
+  } catch (redisWriteError: any) {
+    await job.log(
+      `Model image Redis write failed, continuing without cache: ${
+        redisWriteError?.message || "Unknown Redis error"
+      }`,
+    );
+  }
+
+  return imageBase64;
 }
 
 function buildAccessoryEditPrompt(
@@ -420,6 +628,15 @@ export async function extractMultipleObjects(
 const virtualTryOnWorker = new Worker(
   "virtualTryOn",
   async (job: Job) => {
+    const tJobStart = Date.now();
+    let tModelFetch = 0;
+    let tGarmentFetch = 0;
+    let tFileDataUriResolve = 0;
+    let tInlineFallbackPrep = 0;
+    let tGeminiGenerate = 0;
+    let tBgRemove = 0;
+    let tCenter = 0;
+    let tUpload = 0;
     const {
       userId,
       topId,
@@ -500,7 +717,6 @@ const virtualTryOnWorker = new Worker(
           return {
             success: true,
             message: "Outfit already exists in cache",
-            imageBase64: null,
             savedFileName: `${existingOutfit.id}.png`,
             downloadUrl: existingOutfit.primaryImageUrl || undefined,
           };
@@ -573,23 +789,32 @@ const virtualTryOnWorker = new Worker(
           `   Items to composite: ${garmentItems.map((g) => g.type).join(", ")}`,
         );
 
-        // Download all garment images
-        const garmentBuffers: Array<{ buffer: Buffer; type: string }> = [];
-        for (const item of garmentItems) {
-          try {
-            const base64 = await downloadAndConvertToBase64(item.url);
-            const buffer = Buffer.from(base64, "base64");
-            garmentBuffers.push({ buffer, type: item.type });
-            await job.log(`   ✓ Downloaded ${item.type}`);
-          } catch (error: any) {
-            await job.log(
-              `   ✗ Failed to download ${item.type}: ${error.message}`,
-            );
-            throw new Error(
-              `Failed to download ${item.type} from ${item.url}: ${error.message}`,
-            );
-          }
-        }
+        // Download all garment images in parallel
+        await job.log(
+          `   Downloading ${garmentItems.length} garment image(s) in parallel...`,
+        );
+        const tBatchGarmentsStart = Date.now();
+        const garmentBuffers: Array<{ buffer: Buffer; type: string }> =
+          await Promise.all(
+            garmentItems.map(async (item) => {
+              try {
+                const base64 = await downloadAndConvertToBase64(item.url);
+                await job.log(`   ✓ Downloaded ${item.type}`);
+                return {
+                  buffer: Buffer.from(base64, "base64"),
+                  type: item.type,
+                };
+              } catch (error: any) {
+                await job.log(
+                  `   ✗ Failed to download ${item.type}: ${error.message}`,
+                );
+                throw new Error(
+                  `Failed to download ${item.type} from ${item.url}: ${error.message}`,
+                );
+              }
+            }),
+          );
+        tGarmentFetch += Date.now() - tBatchGarmentsStart;
 
         // Create composite image: arrange garments in a 2x2 GRID layout
         // This makes it clearly a "product showcase" that looks nothing like the desired output
@@ -677,31 +902,129 @@ const virtualTryOnWorker = new Worker(
         `Outfit composition (Top:${receivedTopId} Bottom:${receivedBottomId} Shoes:${receivedShoesId} Dress:${receivedDressId})`,
       );
 
-      // Download model image
-      let modelImageBase64: string;
-
-      try {
-        modelImageBase64 = await downloadAndConvertToBase64(modelImageUrl);
-        await job.log("Model image downloaded successfully");
-      } catch (downloadError: any) {
-        await job.log(`Model image download failed: ${downloadError.message}`);
-        throw new Error(
-          `Failed to download model image from ${modelImageUrl}: ${downloadError.message}`,
-        );
-      }
-
-      // Download garment image (only if sequential garment mode - batch mode already downloaded)
-      if (!isBatchMode && hasGarmentInputs) {
+      // Prepare model and garment inputs for Gemini.
+      // In sequential/outerwear-only mode we try URI-based fileData first,
+      // but keep inline base64 ready as fallback if URI mode returns no image.
+      let modelImageBase64: string | undefined;
+      let modelRegisteredUri: string | undefined;
+      let garmentRegisteredUri: string | undefined;
+      if (isBatchMode || !hasGarmentInputs) {
         try {
-          garmentImageBase64 =
-            await downloadAndConvertToBase64(garmentImageUrl);
-          await job.log("Garment image downloaded successfully");
+          const tModelStart = Date.now();
+          modelImageBase64 = await getOrCreateBaseModelBase64(
+            userId,
+            modelImageUrl,
+            job,
+          );
+          tModelFetch += Date.now() - tModelStart;
+          await job.log("Model image ready for processing");
         } catch (downloadError: any) {
           await job.log(
-            `Garment image download failed: ${downloadError.message}`,
+            `Model image download failed: ${downloadError.message}`,
           );
           throw new Error(
-            `Failed to download garment image from ${garmentImageUrl}: ${downloadError.message}`,
+            `Failed to download model image from ${modelImageUrl}: ${downloadError.message}`,
+          );
+        }
+      } else {
+        try {
+          if (useFileDataForVto) {
+            const tRegisterStart = Date.now();
+            const modelMimeType = inferMimeTypeFromUrl(modelImageUrl);
+            const garmentMimeType = inferMimeTypeFromUrl(garmentImageUrl);
+            const [resolvedModelResult, resolvedGarmentResult] =
+              await Promise.all([
+                resolveGeminiFileUriFromSource(modelImageUrl, modelMimeType),
+                resolveGeminiFileUriFromSource(
+                  garmentImageUrl,
+                  garmentMimeType,
+                ),
+              ]);
+            modelRegisteredUri = resolvedModelResult.uri;
+            garmentRegisteredUri = resolvedGarmentResult.uri;
+            const tRegisterElapsed = Date.now() - tRegisterStart;
+            tFileDataUriResolve += tRegisterElapsed;
+            tModelFetch += tRegisterElapsed;
+            tGarmentFetch += tRegisterElapsed;
+            await job.log(
+              "Using registered Gemini file URIs for sequential try-on (inline fallback available)",
+            );
+            await job.log(
+              `Gemini file URI method - model: ${resolvedModelResult.method}, garment: ${resolvedGarmentResult.method}`,
+            );
+            if (resolvedModelResult.fallbackReason) {
+              await job.log(
+                `Gemini model URI fallback reason: ${resolvedModelResult.fallbackReason}`,
+              );
+              console.log(
+                `🧭 [VTO] Gemini model URI fallback reason: ${resolvedModelResult.fallbackReason}`,
+              );
+            }
+            if (resolvedGarmentResult.fallbackReason) {
+              await job.log(
+                `Gemini garment URI fallback reason: ${resolvedGarmentResult.fallbackReason}`,
+              );
+              console.log(
+                `🧭 [VTO] Gemini garment URI fallback reason: ${resolvedGarmentResult.fallbackReason}`,
+              );
+            }
+            await job.log(
+              `Gemini file URI resolve timing (ms) - model: ${resolvedModelResult.elapsedMs}, garment: ${resolvedGarmentResult.elapsedMs}`,
+            );
+            console.log(
+              `🧭 [VTO] Gemini file URI method - model: ${resolvedModelResult.method}, garment: ${resolvedGarmentResult.method}`,
+            );
+            console.log(
+              `🧭 [VTO] Gemini file URI resolve timing (ms) - model: ${resolvedModelResult.elapsedMs}, garment: ${resolvedGarmentResult.elapsedMs}`,
+            );
+            if (useFileDataStrictForVto) {
+              await job.log(
+                "VTO_FILEDATA_STRICT=true: skipping inline predownload/base64 preparation",
+              );
+              console.log(
+                "🧭 [VTO] VTO_FILEDATA_STRICT=true: skipping inline predownload/base64 preparation",
+              );
+            } else {
+              const tSequentialFetchStart = Date.now();
+              const [resolvedModelImageBase64, resolvedGarmentImageBase64] =
+                await Promise.all([
+                  getOrCreateBaseModelBase64(userId, modelImageUrl, job),
+                  downloadAndConvertToBase64(garmentImageUrl),
+                ]);
+              modelImageBase64 = resolvedModelImageBase64;
+              garmentImageBase64 = resolvedGarmentImageBase64;
+              const tSequentialFetchElapsed =
+                Date.now() - tSequentialFetchStart;
+              tInlineFallbackPrep += tSequentialFetchElapsed;
+              tModelFetch += tSequentialFetchElapsed;
+              tGarmentFetch += tSequentialFetchElapsed;
+              await job.log(
+                "Hybrid mode: prepared inline fallback buffers for sequential try-on",
+              );
+              console.log(
+                "🧭 [VTO] Hybrid mode: prepared inline fallback buffers for sequential try-on",
+              );
+            }
+          } else {
+            const tSequentialFetchStart = Date.now();
+            const [resolvedModelImageBase64, resolvedGarmentImageBase64] =
+              await Promise.all([
+                getOrCreateBaseModelBase64(userId, modelImageUrl, job),
+                downloadAndConvertToBase64(garmentImageUrl),
+              ]);
+            modelImageBase64 = resolvedModelImageBase64;
+            garmentImageBase64 = resolvedGarmentImageBase64;
+            const tSequentialFetchElapsed = Date.now() - tSequentialFetchStart;
+            tModelFetch += tSequentialFetchElapsed;
+            tGarmentFetch += tSequentialFetchElapsed;
+            await job.log("Using inline image inputs for sequential try-on");
+          }
+        } catch (downloadError: any) {
+          await job.log(
+            `Sequential input preparation failed: ${downloadError.message}`,
+          );
+          throw new Error(
+            `Failed to prepare sequential model/garment inputs: ${downloadError.message}`,
           );
         }
       }
@@ -719,7 +1042,7 @@ const virtualTryOnWorker = new Worker(
       let imageMimeType = "image/png";
 
       if (!hasGarmentInputs) {
-        imageBuffer = Buffer.from(modelImageBase64, "base64");
+        imageBuffer = Buffer.from(modelImageBase64!, "base64");
         imageMimeType = "image/jpeg";
         await job.log("Skipped garment generation step (accessory-only mode).");
       }
@@ -1140,6 +1463,8 @@ ${isBatchMode && shoesGSURL ? "□ Shoes worn ON person's feet, not shown separa
       if (hasGarmentInputs) {
         // Generate try-on image using Gemini API (not Vertex AI)
         const maxRetries = 5;
+        const compatibilityPrompt =
+          "Edit the first image so the person is naturally wearing the clothing from the second image. Preserve identity, body, pose, framing, and background. Return only one photorealistic edited image.";
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
@@ -1147,27 +1472,64 @@ ${isBatchMode && shoesGSURL ? "□ Shoes worn ON person's feet, not shown separa
               `Generating virtual try-on (attempt ${attempt}/${maxRetries})...`,
             );
 
-            const response = await ai.models.generateContent({
+            const modelMimeType = inferMimeTypeFromUrl(modelImageUrl);
+            const garmentMimeType = inferMimeTypeFromUrl(
+              isBatchMode ? "batch-composite.png" : garmentImageUrl,
+            );
+
+            const modelPart =
+              !isBatchMode && hasGarmentInputs && useFileDataForVto
+                ? {
+                    fileData: {
+                      mimeType: modelMimeType,
+                      fileUri: modelRegisteredUri || modelImageUrl,
+                    },
+                  }
+                : {
+                    inlineData: {
+                      mimeType: modelMimeType,
+                      data: modelImageBase64!,
+                    },
+                  };
+            const garmentPart =
+              !isBatchMode && hasGarmentInputs && useFileDataForVto
+                ? {
+                    fileData: {
+                      mimeType: garmentMimeType,
+                      fileUri: garmentRegisteredUri || garmentImageUrl,
+                    },
+                  }
+                : {
+                    inlineData: {
+                      mimeType: garmentMimeType,
+                      data: garmentImageBase64,
+                    },
+                  };
+
+            await job.log(
+              `Gemini input mode: ${
+                !isBatchMode && hasGarmentInputs && useFileDataForVto
+                  ? "fileData"
+                  : "inlineData"
+              }`,
+            );
+            console.log(
+              `🧭 [VTO] Gemini input mode: ${
+                !isBatchMode && hasGarmentInputs && useFileDataForVto
+                  ? "fileData"
+                  : "inlineData"
+              }`,
+            );
+
+            const tGeminiStart = Date.now();
+            let response = await ai.models.generateContent({
               model: "gemini-2.5-flash-image",
-              contents: [
-                { text: prompt },
-                {
-                  inlineData: {
-                    mimeType: "image/jpeg",
-                    data: modelImageBase64,
-                  },
-                },
-                {
-                  inlineData: {
-                    mimeType: "image/jpeg",
-                    data: garmentImageBase64,
-                  },
-                },
-              ],
+              contents: [{ text: prompt }, modelPart, garmentPart],
               config: {
                 responseModalities: [Modality.IMAGE, Modality.TEXT],
               },
             });
+            tGeminiGenerate += Date.now() - tGeminiStart;
 
             // Extract image from response
             if (response?.candidates?.[0]?.content?.parts) {
@@ -1183,15 +1545,94 @@ ${isBatchMode && shoesGSURL ? "□ Shoes worn ON person's feet, not shown separa
               }
             }
 
+            if (
+              !imageBuffer &&
+              !isBatchMode &&
+              hasGarmentInputs &&
+              useFileDataForVto
+            ) {
+              if (useFileDataStrictForVto) {
+                await job.log(
+                  "VTO_FILEDATA_STRICT=true: not performing inline fallback after fileData attempt",
+                );
+              } else {
+                await job.log(
+                  "No image from URI-based inputs, retrying attempt with inline fallback",
+                );
+                if (!modelImageBase64 || !garmentImageBase64) {
+                  const tInlinePrepStart = Date.now();
+                  const [resolvedModelImageBase64, resolvedGarmentImageBase64] =
+                    await Promise.all([
+                      getOrCreateBaseModelBase64(userId, modelImageUrl, job),
+                      downloadAndConvertToBase64(garmentImageUrl),
+                    ]);
+                  modelImageBase64 = resolvedModelImageBase64;
+                  garmentImageBase64 = resolvedGarmentImageBase64;
+                  const tInlinePrepElapsed = Date.now() - tInlinePrepStart;
+                  tInlineFallbackPrep += tInlinePrepElapsed;
+                  tModelFetch += tInlinePrepElapsed;
+                  tGarmentFetch += tInlinePrepElapsed;
+                }
+                const tInlineFallbackStart = Date.now();
+                response = await ai.models.generateContent({
+                  model: "gemini-2.5-flash-image",
+                  contents: [
+                    { text: prompt },
+                    {
+                      inlineData: {
+                        mimeType: modelMimeType,
+                        data: modelImageBase64!,
+                      },
+                    },
+                    {
+                      inlineData: {
+                        mimeType: garmentMimeType,
+                        data: garmentImageBase64!,
+                      },
+                    },
+                  ],
+                  config: {
+                    responseModalities: [Modality.IMAGE, Modality.TEXT],
+                  },
+                });
+                tGeminiGenerate += Date.now() - tInlineFallbackStart;
+
+                if (response?.candidates?.[0]?.content?.parts) {
+                  for (const part of response.candidates[0].content.parts) {
+                    if (part.inlineData?.data) {
+                      imageBuffer = Buffer.from(part.inlineData.data, "base64");
+                      imageMimeType = part.inlineData.mimeType || "image/png";
+                      await job.log(
+                        `Image generated successfully via inline fallback (${imageMimeType})`,
+                      );
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
             if (imageBuffer) {
               await job.log(
                 `✓ Generated image successfully on attempt ${attempt}`,
               );
               break;
             } else {
+              const finishReason =
+                response?.candidates?.[0]?.finishReason || "UNKNOWN";
+              const textPart =
+                response?.candidates?.[0]?.content?.parts?.find(
+                  (part: any) =>
+                    typeof part.text === "string" && part.text.trim(),
+                )?.text || "";
               await job.log(
-                `⚠ No image generated on attempt ${attempt}, will retry...`,
+                `⚠ No image generated on attempt ${attempt} (finishReason=${finishReason}), will retry...`,
               );
+              if (textPart) {
+                await job.log(
+                  `Gemini text-only response snippet: ${textPart.slice(0, 220)}`,
+                );
+              }
             }
           } catch (apiError: any) {
             const isRateLimitError =
@@ -1231,6 +1672,64 @@ ${isBatchMode && shoesGSURL ? "□ Shoes worn ON person's feet, not shown separa
             }
           }
         }
+
+        // Final compatibility fallback: simplified prompt + inline image parts.
+        if (!imageBuffer) {
+          await job.log(
+            "No image after normal retries. Running final compatibility fallback with simplified prompt...",
+          );
+          const modelInlineBase64 =
+            modelImageBase64 ||
+            (await getOrCreateBaseModelBase64(userId, modelImageUrl, job));
+          const garmentInlineBase64 =
+            garmentImageBase64 ||
+            (await downloadAndConvertToBase64(garmentImageUrl));
+
+          const tCompatStart = Date.now();
+          const compatResponse = await ai.models.generateContent({
+            model: "gemini-2.5-flash-image",
+            contents: [
+              { text: compatibilityPrompt },
+              {
+                inlineData: {
+                  mimeType: inferMimeTypeFromUrl(modelImageUrl),
+                  data: modelInlineBase64,
+                },
+              },
+              {
+                inlineData: {
+                  mimeType: inferMimeTypeFromUrl(garmentImageUrl),
+                  data: garmentInlineBase64,
+                },
+              },
+            ],
+            config: {
+              responseModalities: [Modality.IMAGE, Modality.TEXT],
+            },
+          });
+          tGeminiGenerate += Date.now() - tCompatStart;
+
+          if (compatResponse?.candidates?.[0]?.content?.parts) {
+            for (const part of compatResponse.candidates[0].content.parts) {
+              if (part.inlineData?.data) {
+                imageBuffer = Buffer.from(part.inlineData.data, "base64");
+                imageMimeType = part.inlineData.mimeType || "image/png";
+                await job.log(
+                  `Compatibility fallback generated image successfully (${imageMimeType})`,
+                );
+                break;
+              }
+            }
+          }
+
+          if (!imageBuffer) {
+            const fallbackFinishReason =
+              compatResponse?.candidates?.[0]?.finishReason || "UNKNOWN";
+            await job.log(
+              `Compatibility fallback produced no image (finishReason=${fallbackFinishReason})`,
+            );
+          }
+        }
       }
 
       if (!imageBuffer) {
@@ -1249,6 +1748,18 @@ ${isBatchMode && shoesGSURL ? "□ Shoes worn ON person's feet, not shown separa
           `Applying ${accessoryItems.length} accessory item(s) to generated outfit...`,
         );
 
+        const tAccessoryPrefetchStart = Date.now();
+        const accessoryEntries: Array<[string, string]> = await Promise.all(
+          accessoryItems.map(
+            async (item): Promise<[string, string]> => [
+              item.url!,
+              await downloadAndConvertToBase64(item.url!),
+            ],
+          ),
+        );
+        const accessoryBase64ByUrl = new Map<string, string>(accessoryEntries);
+        tGarmentFetch += Date.now() - tAccessoryPrefetchStart;
+
         for (let i = 0; i < accessoryItems.length; i++) {
           const accessory = accessoryItems[i];
 
@@ -1256,9 +1767,7 @@ ${isBatchMode && shoesGSURL ? "□ Shoes worn ON person's feet, not shown separa
             `Applying accessory ${i + 1}/${accessoryItems.length}: ${accessory.category}`,
           );
 
-          const accessoryBase64 = await downloadAndConvertToBase64(
-            accessory.url,
-          );
+          const accessoryBase64 = accessoryBase64ByUrl.get(accessory.url!)!;
 
           const editPrompt = buildAccessoryEditPrompt(
             accessory.category,
@@ -1351,6 +1860,7 @@ Main image to edit (add accessory to this person):`;
 
       // Apply background removal
       try {
+        const tBgStart = Date.now();
         const base64Image = `data:${imageMimeType};base64,${imageBuffer.toString(
           "base64",
         )}`;
@@ -1364,6 +1874,7 @@ Main image to edit (add accessory to this person):`;
         });
         const base64Data = resultBase64.split(",")[1] || resultBase64;
         imageBuffer = Buffer.from(base64Data, "base64");
+        tBgRemove += Date.now() - tBgStart;
         await job.log(
           `Background removal completed (new size: ${Math.round(
             imageBuffer.length / 1024,
@@ -1385,7 +1896,9 @@ Main image to edit (add accessory to this person):`;
 
       // Apply automatic centering and standardization
       try {
+        const tCenterStart = Date.now();
         imageBuffer = await centerAndStandardizeImage(imageBuffer);
+        tCenter += Date.now() - tCenterStart;
         await job.log("✅ Image centered and standardized successfully");
       } catch (centerError: any) {
         await job.log(
@@ -1428,6 +1941,7 @@ Main image to edit (add accessory to this person):`;
       const fileName = `outfit_${userId}_${Date.now()}.png`;
 
       // Upload to GCS
+      const tUploadStart = Date.now();
       const uploadResult = await gcsService.uploadFile(
         imageBuffer,
         fileName,
@@ -1435,6 +1949,7 @@ Main image to edit (add accessory to this person):`;
         `VirtualTryOn`,
         "image/png",
       );
+      tUpload += Date.now() - tUploadStart;
 
       await job.updateProgress(90);
       await job.log("Saving outfit to database...");
@@ -1475,11 +1990,24 @@ Main image to edit (add accessory to this person):`;
       console.log(
         `✅ Virtual try-on completed for user ${userId}, outfit ID: ${finalOutfitId}`,
       );
+      const tTotal = Date.now() - tJobStart;
+      recordTiming("t_model_fetch", tModelFetch);
+      recordTiming("t_garment_fetch", tGarmentFetch);
+      recordTiming("t_filedata_uri_resolve", tFileDataUriResolve);
+      recordTiming("t_inline_fallback_prep", tInlineFallbackPrep);
+      recordTiming("t_gemini_generate", tGeminiGenerate);
+      recordTiming("t_bg_remove", tBgRemove);
+      recordTiming("t_center", tCenter);
+      recordTiming("t_upload", tUpload);
+      recordTiming("total", tTotal);
+      await job.log(
+        `timings(ms): model=${tModelFetch} garment=${tGarmentFetch} filedata_uri_resolve=${tFileDataUriResolve} inline_fallback_prep=${tInlineFallbackPrep} gemini=${tGeminiGenerate} bg=${tBgRemove} center=${tCenter} upload=${tUpload} total=${tTotal}`,
+      );
+      logTimingSummary(job.id || "unknown");
 
       return {
         success: true,
         message: "Virtual try-on completed successfully",
-        imageBase64: imageBuffer.toString("base64"),
         savedFileName: fileName,
         downloadUrl: uploadResult.httpUrl,
         outfitId: finalOutfitId,
@@ -1493,7 +2021,7 @@ Main image to edit (add accessory to this person):`;
   },
   {
     connection: redisConnection,
-    concurrency: 5, // Higher concurrency - single API call per job
+    concurrency: parseInt(process.env.VTO_QUEUE_CONCURRENCY || "3", 10),
   },
 );
 

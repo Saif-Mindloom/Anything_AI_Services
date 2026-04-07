@@ -13,7 +13,7 @@ const SAVE_DEBUG_IMAGES = process.env.SAVE_DEBUG_IMAGES === "true";
 // Initialize Google AI client
 const ai = new GoogleGenAI({
   apiKey:
-    process.env.GOOGLE_AI_API_KEY || "AIzaSyB_m0qCgrF1GGFXnY7DmOEXHwDtnBVEhlY",
+    process.env.GOOGLE_AI_API_KEY || "AIzaSyD-dGOfFy8yS9l0LfgdK6rw8iSvudKHmik",
 });
 const model = "gemini-2.5-flash-image";
 

@@ -2,9 +2,7 @@ import { getUserFromToken } from "../helpers/utils";
 import { Outfit } from "../models/outfit.model";
 import {
   addVirtualTryOnJob,
-  virtualTryOnQueue,
 } from "../queues/virtualTryOnQueue";
-import { pollJobUntilComplete } from "../helpers/jobPoller";
 
 interface VirtualTryOnArgs {
   topId?: number;
@@ -36,11 +34,11 @@ interface VirtualTryOnArgs {
 interface VirtualTryOnResponse {
   success: boolean;
   message: string;
-  imageBase64?: string;
   savedFileName?: string;
   downloadUrl?: string;
   gsUri?: string;
-  jobId?: string;
+  /** Present when a job was queued; null when outfit was served from DB cache (no polling). */
+  jobId?: string | null;
   status?: string;
   outfitId?: number;
 }
@@ -281,7 +279,7 @@ export const virtualTryOnMutation = async (
     }
 
     // Check cache only for non-accessory requests.
-    // Accessory combinations are not currently part of outfit cache key.
+    // Accessory combinations are intentionally excluded from resolver cache lookup.
     if (!hasAccessoryInputs) {
       const existingOutfit = await Outfit.findOne({
         where: {
@@ -299,16 +297,17 @@ export const virtualTryOnMutation = async (
         return {
           success: true,
           message: "Outfit already exists in cache",
-          imageBase64: null,
           savedFileName: `${existingOutfit.id}.png`,
           downloadUrl: existingOutfit.primaryImageUrl || undefined,
+          gsUri: existingOutfit.gsUtil || undefined,
           outfitId: existingOutfit.id,
+          jobId: null,
           status: "completed",
         };
       }
     } else {
       console.log(
-        "👜 Accessory request detected: skipping outfit cache lookup to avoid mismatched cached non-accessory result",
+        "👜 Accessory request detected: skipping outfit cache lookup",
       );
     }
 
@@ -341,47 +340,12 @@ export const virtualTryOnMutation = async (
     });
 
     console.log(`✅ Virtual try-on job queued with ID: ${jobId}`);
-    console.log(`⏳ Polling job status every 2 seconds until complete...`);
-
-    // Poll the job until it completes (server-side polling)
-    const result = await pollJobUntilComplete(
-      virtualTryOnQueue,
-      jobId as string,
-      {
-        pollInterval: 2000, // Poll every 2 seconds
-        timeout: 180000, // 3 minutes timeout
-      },
-    );
-
-    if (result.status === "completed") {
-      console.log(`✅ Virtual try-on completed successfully`);
-      return {
-        success: true,
-        message:
-          result.data?.message || "Virtual try-on completed successfully",
-        imageBase64: result.data?.imageBase64 || undefined,
-        savedFileName: result.data?.savedFileName || undefined,
-        downloadUrl: result.data?.downloadUrl || undefined,
-        outfitId: result.data?.outfitId || undefined,
-        status: "completed",
-      };
-    } else if (result.status === "failed") {
-      console.error(`❌ Virtual try-on failed: ${result.error}`);
-      return {
-        success: false,
-        message: result.error || "Virtual try-on failed",
-        jobId: jobId as string,
-        status: "failed",
-      };
-    } else if (result.status === "timeout") {
-      console.warn(`⏱️ Virtual try-on timeout`);
-      return {
-        success: false,
-        message: "Processing timeout. You can check the job status later.",
-        jobId: jobId as string,
-        status: "timeout",
-      };
-    }
+    return {
+      success: true,
+      message: "Virtual try-on job queued successfully",
+      jobId: jobId as string,
+      status: "queued",
+    };
   } catch (err: any) {
     console.error("❌ Virtual try-on error:", err);
     return {

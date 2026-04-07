@@ -119,6 +119,7 @@ services:
       - REDIS_PORT=6379
       # API Keys - loaded from .env file
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - REMOVEBG_API_KEY=${REMOVEBG_API_KEY}
       - PAT=${PAT}
@@ -133,6 +134,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_change_this_in_production}
       # Google Cloud
       - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-anything-ai-assets}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/root/.config/gcloud/application_default_credentials.json}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
       - GOOGLE_IMPERSONATE_SERVICE_ACCOUNT=${GOOGLE_IMPERSONATE_SERVICE_ACCOUNT}
@@ -146,6 +148,8 @@ services:
       - BIREFNET_SERVICE_URL=${BIREFNET_SERVICE_URL:-http://birefnet-service:8000}
       # Debug Options
       - SAVE_DEBUG_IMAGES=${SAVE_DEBUG_IMAGES:-false}
+      - VTO_USE_FILEDATA=${VTO_USE_FILEDATA:-true}
+      - VTO_FILEDATA_STRICT=${VTO_FILEDATA_STRICT:-true}
       # MSG91 Email Configuration
       - MSG91_EMAIL_AUTH_KEY=${MSG91_EMAIL_AUTH_KEY}
       - MSG91_EMAIL_FROM_EMAIL=${MSG91_EMAIL_FROM_EMAIL}

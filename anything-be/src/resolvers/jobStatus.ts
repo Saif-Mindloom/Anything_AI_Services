@@ -198,19 +198,29 @@ router.get("/job-status/:jobId", async (req, res) => {
     // Add result if completed
     if (state === "completed") {
       const returnValue = await job.returnvalue;
-      const savedApparels = returnValue?.savedApparels || [];
-      const imagesWithoutClothes = returnValue?.imagesWithoutClothes || [];
-      const imagesWithProcessedItems =
-        groupApparelsByOriginalImage(savedApparels);
+      if (queueName === "virtualTryOn") {
+        response.job.result = {
+          success: returnValue?.success ?? true,
+          message: returnValue?.message,
+          savedFileName: returnValue?.savedFileName,
+          downloadUrl: returnValue?.downloadUrl,
+          outfitId: returnValue?.outfitId,
+        };
+      } else {
+        const savedApparels = returnValue?.savedApparels || [];
+        const imagesWithoutClothes = returnValue?.imagesWithoutClothes || [];
+        const imagesWithProcessedItems =
+          groupApparelsByOriginalImage(savedApparels);
 
-      response.job.result = {
-        savedApparels: savedApparels,
-        failedApparels: returnValue?.failedApparels || [],
-        imagesWithoutClothes: imagesWithoutClothes,
-        message: returnValue?.message,
-        durationSeconds: returnValue?.durationSeconds, // Include worker-reported duration
-        imagesWithProcessedItems, // Grouped structure for easy frontend display
-      };
+        response.job.result = {
+          savedApparels: savedApparels,
+          failedApparels: returnValue?.failedApparels || [],
+          imagesWithoutClothes: imagesWithoutClothes,
+          message: returnValue?.message,
+          durationSeconds: returnValue?.durationSeconds, // Include worker-reported duration
+          imagesWithProcessedItems, // Grouped structure for easy frontend display
+        };
+      }
     }
 
     // Add error if failed
@@ -347,19 +357,29 @@ router.get("/jobs/:jobId/status", async (req, res) => {
     // Add result if completed
     if (state === "completed") {
       const returnValue = await job.returnvalue;
-      const savedApparels = returnValue?.savedApparels || [];
-      const imagesWithoutClothes = returnValue?.imagesWithoutClothes || [];
-      const imagesWithProcessedItems =
-        groupApparelsByOriginalImage(savedApparels);
+      if (queueName === "virtualTryOn") {
+        response.job.result = {
+          success: returnValue?.success ?? true,
+          message: returnValue?.message,
+          savedFileName: returnValue?.savedFileName,
+          downloadUrl: returnValue?.downloadUrl,
+          outfitId: returnValue?.outfitId,
+        };
+      } else {
+        const savedApparels = returnValue?.savedApparels || [];
+        const imagesWithoutClothes = returnValue?.imagesWithoutClothes || [];
+        const imagesWithProcessedItems =
+          groupApparelsByOriginalImage(savedApparels);
 
-      response.job.result = {
-        savedApparels: savedApparels,
-        failedApparels: returnValue?.failedApparels || [],
-        imagesWithoutClothes: imagesWithoutClothes,
-        message: returnValue?.message,
-        durationSeconds: returnValue?.durationSeconds,
-        imagesWithProcessedItems,
-      };
+        response.job.result = {
+          savedApparels: savedApparels,
+          failedApparels: returnValue?.failedApparels || [],
+          imagesWithoutClothes: imagesWithoutClothes,
+          message: returnValue?.message,
+          durationSeconds: returnValue?.durationSeconds,
+          imagesWithProcessedItems,
+        };
+      }
     }
 
     // Add error if failed

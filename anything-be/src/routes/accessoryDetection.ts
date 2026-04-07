@@ -33,7 +33,7 @@ const gemini = new GoogleGenAI({
   apiKey:
     process.env.GEMINI_API_KEY ||
     process.env.GOOGLE_AI_API_KEY ||
-    "AIzaSyB_m0qCgrF1GGFXnY7DmOEXHwDtnBVEhlY",
+    "AIzaSyD-dGOfFy8yS9l0LfgdK6rw8iSvudKHmik",
 });
 
 type BoundingBox = [[number, number], [number, number]];

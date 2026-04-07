@@ -79,7 +79,7 @@ const handleApiResponse = (response: any): string => {
 };
 
 const ai = new GoogleGenAI({
-  apiKey: "AIzaSyB_m0qCgrF1GGFXnY7DmOEXHwDtnBVEhlY",
+  apiKey: "AIzaSyD-dGOfFy8yS9l0LfgdK6rw8iSvudKHmik",
 });
 const model = "gemini-2.5-flash-image";
 

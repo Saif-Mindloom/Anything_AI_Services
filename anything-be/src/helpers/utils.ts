@@ -435,7 +435,12 @@ export const calculateAge = (dob: string): number => {
  */
 export const saveBase64Image = (
   base64Data: string,
-  options?: { tryOn?: boolean; angles?: boolean; backgroundRemoved?: boolean },
+  options?: {
+    tryOn?: boolean;
+    angles?: boolean;
+    backgroundRemoved?: boolean;
+    cleanupAfterSeconds?: number;
+  },
 ): string => {
   const fs = require("fs");
   const path = require("path");
@@ -466,6 +471,24 @@ export const saveBase64Image = (
 
   // Write file
   fs.writeFileSync(filePath, buffer);
+
+  if (
+    options?.cleanupAfterSeconds &&
+    Number.isFinite(options.cleanupAfterSeconds) &&
+    options.cleanupAfterSeconds > 0
+  ) {
+    const cleanupDelayMs = options.cleanupAfterSeconds * 1000;
+    setTimeout(() => {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log(`🧹 Cleaned up local image: ${filePath}`);
+        }
+      } catch (cleanupError) {
+        console.warn(`⚠️ Failed to cleanup local image ${filePath}:`, cleanupError);
+      }
+    }, cleanupDelayMs);
+  }
 
   console.log(`✅ Saved image: ${filePath}`);
   return fileName;

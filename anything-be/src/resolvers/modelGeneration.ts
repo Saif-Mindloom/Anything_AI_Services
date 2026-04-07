@@ -70,6 +70,26 @@ router.post("/test-generate-model-angles", async (req, res) => {
           const filePath = path.join(outputDir, fileName);
           fs.writeFileSync(filePath, buffer);
 
+          const cleanupAfterSeconds = parseInt(
+            process.env.LOCAL_IMAGE_CLEANUP_TTL_SECONDS || "3600",
+            10
+          );
+          if (Number.isFinite(cleanupAfterSeconds) && cleanupAfterSeconds > 0) {
+            setTimeout(() => {
+              try {
+                if (fs.existsSync(filePath)) {
+                  fs.unlinkSync(filePath);
+                  console.log(`🧹 Cleaned up local test angle image: ${filePath}`);
+                }
+              } catch (cleanupError) {
+                console.warn(
+                  `⚠️ Failed to cleanup local test angle image ${filePath}:`,
+                  cleanupError
+                );
+              }
+            }, cleanupAfterSeconds * 1000);
+          }
+
           console.log(`Saved ${degree}° angle image: ${filePath}`);
 
           angles.push({

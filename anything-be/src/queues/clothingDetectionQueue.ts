@@ -3,6 +3,120 @@ import { redisConnection } from "./redis";
 import { ClothingDetectionCropService } from "../services/clothingDetectionCropService";
 import { isolateClothingItems } from "../services/clothingIsolationService";
 import { bulkCreateApparelsFromCroppedItems } from "../services/apparelService";
+import { deleteFileByUri } from "../services/gcsService";
+import { pollJobUntilComplete } from "../helpers/jobPoller";
+
+const verboseDetectionLogs = process.env.CLOTHING_DETECTION_VERBOSE_LOGS === "true";
+const isTempUploadUrl = (url: string): boolean => url.includes("/Clothing/Temp/");
+
+// Rolling telemetry for "add items" (clothing detection) — mirrors VTO percentile logging
+const addItemsSingleSamples: Record<string, number[]> = {
+  t_download: [],
+  t_detection: [],
+  t_isolation: [],
+  t_db: [],
+  total: [],
+};
+
+const addItemsBatchSamples: Record<string, number[]> = {
+  t_create_child_jobs: [],
+  t_wait_children: [],
+  t_aggregate: [],
+  total: [],
+};
+
+function percentile(values: number[], p: number): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.floor((p / 100) * sorted.length)),
+  );
+  return sorted[idx];
+}
+
+function recordAddItemsSingle(metric: keyof typeof addItemsSingleSamples, ms: number): void {
+  const arr = addItemsSingleSamples[metric];
+  arr.push(ms);
+  if (arr.length > 200) arr.shift();
+}
+
+function recordAddItemsBatch(metric: keyof typeof addItemsBatchSamples, ms: number): void {
+  const arr = addItemsBatchSamples[metric];
+  arr.push(ms);
+  if (arr.length > 200) arr.shift();
+}
+
+function logAddItemsSingleSummary(jobId: string | number): void {
+  const snapshot = Object.entries(addItemsSingleSamples)
+    .map(([metric, values]) => {
+      if (!values.length) return null;
+      return `${metric}: p50=${percentile(values, 50).toFixed(0)}ms p95=${percentile(values, 95).toFixed(0)}ms p99=${percentile(values, 99).toFixed(0)}ms`;
+    })
+    .filter(Boolean)
+    .join(" | ");
+  if (snapshot) {
+    console.log(`📊 Add-items (single) timing summary after job ${jobId} -> ${snapshot}`);
+  }
+}
+
+function logAddItemsBatchSummary(jobId: string | number): void {
+  const snapshot = Object.entries(addItemsBatchSamples)
+    .map(([metric, values]) => {
+      if (!values.length) return null;
+      return `${metric}: p50=${percentile(values, 50).toFixed(0)}ms p95=${percentile(values, 95).toFixed(0)}ms p99=${percentile(values, 99).toFixed(0)}ms`;
+    })
+    .filter(Boolean)
+    .join(" | ");
+  if (snapshot) {
+    console.log(`📊 Add-items (batch) timing summary after job ${jobId} -> ${snapshot}`);
+  }
+}
+
+async function emitAddItemsSingleTelemetry(
+  job: Job,
+  jobStart: number,
+  parts: { download: number; detection: number; isolation: number; db: number },
+): Promise<void> {
+  const total = Date.now() - jobStart;
+  recordAddItemsSingle("t_download", parts.download);
+  recordAddItemsSingle("t_detection", parts.detection);
+  recordAddItemsSingle("t_isolation", parts.isolation);
+  recordAddItemsSingle("t_db", parts.db);
+  recordAddItemsSingle("total", total);
+  const line = `Add-items timings(ms): download=${parts.download} detection=${parts.detection} isolation=${parts.isolation} db=${parts.db} total=${total}`;
+  try {
+    await job.log(line);
+  } catch {
+    // non-fatal
+  }
+  console.log(`📊 ${line} (add-items single job ${job.id})`);
+  logAddItemsSingleSummary(job.id ?? "unknown");
+}
+
+async function emitAddItemsBatchTelemetry(
+  job: Job,
+  jobStart: number,
+  parts: {
+    createChildJobs: number;
+    waitChildren: number;
+    aggregate: number;
+  },
+): Promise<void> {
+  const total = Date.now() - jobStart;
+  recordAddItemsBatch("t_create_child_jobs", parts.createChildJobs);
+  recordAddItemsBatch("t_wait_children", parts.waitChildren);
+  recordAddItemsBatch("t_aggregate", parts.aggregate);
+  recordAddItemsBatch("total", total);
+  const line = `Add-items batch timings(ms): create_child_jobs=${parts.createChildJobs} wait_children=${parts.waitChildren} aggregate=${parts.aggregate} total=${total}`;
+  try {
+    await job.log(line);
+  } catch {
+    // non-fatal
+  }
+  console.log(`📊 ${line} (add-items batch job ${job.id})`);
+  logAddItemsBatchSummary(job.id ?? "unknown");
+}
 
 // Queue Definition
 export const clothingDetectionQueue = new Queue("clothingDetection", {
@@ -14,6 +128,7 @@ const clothingDetectionWorker = new Worker(
   "clothingDetection",
   async (job: Job) => {
     const { userId, imageUrl, originalFileName, mimetype } = job.data;
+    const jobStart = Date.now();
 
     try {
       console.log(`\n🔵 [WORKER START] Job ${job.id} beginning processing`);
@@ -30,6 +145,7 @@ const clothingDetectionWorker = new Worker(
       await job.log(`Downloading image from: ${imageUrl}`);
       console.log(`📥 [WORKER] Fetching image from GCS...`);
 
+      const downloadStart = Date.now();
       const response = await fetch(imageUrl);
 
       if (!response.ok) {
@@ -43,6 +159,7 @@ const clothingDetectionWorker = new Worker(
 
       const arrayBuffer = await response.arrayBuffer();
       const imageBuffer = Buffer.from(arrayBuffer);
+      const tDownload = Date.now() - downloadStart;
       console.log(
         `✅ [WORKER] Image downloaded successfully (${(imageBuffer.length / 1024).toFixed(2)} KB)`,
       );
@@ -102,11 +219,17 @@ const clothingDetectionWorker = new Worker(
           ],
         };
 
-        console.log(
-          `\n🎁 [WORKER] Returning from early exit (no items detected):`,
-        );
+      if (verboseDetectionLogs) {
+        console.log(`\n🎁 [WORKER] Returning from early exit (no items detected):`);
         console.log(JSON.stringify(workerReturn, null, 2));
+      }
 
+        await emitAddItemsSingleTelemetry(job, jobStart, {
+          download: tDownload,
+          detection: detectionDuration,
+          isolation: 0,
+          db: 0,
+        });
         return workerReturn;
       }
 
@@ -138,13 +261,14 @@ const clothingDetectionWorker = new Worker(
       );
 
       if (nonAccessoryItems.length === 0) {
-        console.log(
-          `⚠️  [PRE-FILTER] All items were accessories, skipping isolation`,
-        );
-        console.log(
-          "⚠️  [PRE-FILTER] All items were accessories, skipping isolation",
-        );
+        console.log(`⚠️  [PRE-FILTER] All items were accessories, skipping isolation`);
         await job.log("All detected items were accessories, nothing to save");
+        await emitAddItemsSingleTelemetry(job, jobStart, {
+          download: tDownload,
+          detection: detectionDuration,
+          isolation: 0,
+          db: 0,
+        });
         return {
           success: true,
           message: "All detected items were accessories",
@@ -192,6 +316,12 @@ const clothingDetectionWorker = new Worker(
       ) {
         console.log(`⚠️  [WORKER] No items could be isolated, ending job`);
         await job.log("No clothing items could be isolated");
+        await emitAddItemsSingleTelemetry(job, jobStart, {
+          download: tDownload,
+          detection: detectionDuration,
+          isolation: isolationDuration,
+          db: 0,
+        });
         return {
           success: true,
           message:
@@ -222,12 +352,14 @@ const clothingDetectionWorker = new Worker(
         `\n📦 [WORKER] Calling bulkCreateApparelsFromCroppedItems with ${detectionResult.croppedImages.length} cropped images and ${isolationResult.isolatedItems.length} isolated items...`,
       );
 
+      const dbStart = Date.now();
       const savedResult = await bulkCreateApparelsFromCroppedItems(
         detectionResult.croppedImages,
         parseInt(userId),
         isolationResult.isolatedItems,
         imageUrl, // Pass the original uploaded image URL
       );
+      const tDb = Date.now() - dbStart;
 
       console.log(`\n📊 [WORKER] bulkCreateApparelsFromCroppedItems returned:`);
       console.log(`   Success count: ${savedResult.success?.length || 0}`);
@@ -264,17 +396,27 @@ const clothingDetectionWorker = new Worker(
             : [],
       };
 
-      console.log(`\n🎁 [WORKER] Returning value from worker:`);
-      console.log(
-        `   savedApparels count: ${returnValue.savedApparels?.length || 0}`,
-      );
-      console.log(
-        `   savedApparels IDs: ${returnValue.savedApparels?.map((a) => a.id).join(", ") || "none"}`,
-      );
-      console.log(
-        `   imagesWithoutClothes count: ${returnValue.imagesWithoutClothes?.length || 0}`,
-      );
+      if (verboseDetectionLogs) {
+        console.log(`\n🎁 [WORKER] Returning value from worker:`);
+        console.log(
+          `   savedApparels count: ${returnValue.savedApparels?.length || 0}`,
+        );
+        console.log(
+          `   savedApparels IDs: ${
+            returnValue.savedApparels?.map((a) => a.id).join(", ") || "none"
+          }`,
+        );
+        console.log(
+          `   imagesWithoutClothes count: ${returnValue.imagesWithoutClothes?.length || 0}`,
+        );
+      }
 
+      await emitAddItemsSingleTelemetry(job, jobStart, {
+        download: tDownload,
+        detection: detectionDuration,
+        isolation: isolationDuration,
+        db: tDb,
+      });
       return returnValue;
     } catch (error) {
       console.error(`\n❌ [WORKER ERROR] Job ${job.id} failed:`);
@@ -294,6 +436,10 @@ const clothingDetectionWorker = new Worker(
         `Stack: ${error instanceof Error ? error.stack : "No stack trace"}`,
       );
       throw error;
+    } finally {
+      if (isTempUploadUrl(imageUrl)) {
+        await deleteFileByUri(imageUrl);
+      }
     }
   },
   {
@@ -356,6 +502,7 @@ const clothingDetectionBatchWorker = new Worker(
   async (job: Job) => {
     const { userId, imageUrls } = job.data;
     const totalImages = imageUrls.length;
+    const batchJobStart = Date.now();
 
     try {
       await job.updateProgress({ current: 0, total: totalImages });
@@ -373,6 +520,7 @@ const clothingDetectionBatchWorker = new Worker(
 
       // Create child jobs for each image
       await job.log(`Creating ${totalImages} child jobs...`);
+      const createChildStart = Date.now();
       for (const imageData of imageUrls) {
         const childJobId = await addClothingDetectionJob({
           userId,
@@ -382,103 +530,73 @@ const clothingDetectionBatchWorker = new Worker(
         });
         childJobIds.push(childJobId);
       }
+      const tCreateChildJobs = Date.now() - createChildStart;
 
       await job.log(`✅ Created ${childJobIds.length} child jobs`);
 
-      // Process each child job and aggregate results
+      // Wait for all child jobs in parallel and aggregate results
+      const waitStart = Date.now();
+      const childResults = await Promise.all(
+        childJobIds.map(async (childJobId, index) => {
+          const pollResult = await pollJobUntilComplete(
+            clothingDetectionQueue,
+            childJobId,
+            {
+              pollInterval: 5000,
+              timeout: 300000,
+            },
+          );
+          return {
+            index,
+            childJobId,
+            pollResult,
+            imageFileName: imageUrls[index].fileName,
+          };
+        }),
+      );
+      const tWaitChildren = Date.now() - waitStart;
+
+      // Process each child result and aggregate
+      const aggregateStart = Date.now();
       for (let i = 0; i < childJobIds.length; i++) {
-        const childJobId = childJobIds[i];
-        const imageFileName = imageUrls[i].fileName;
+        const { childJobId, imageFileName, pollResult } = childResults[i];
 
         await job.log(
           `Processing image ${i + 1}/${totalImages}: ${imageFileName}`,
         );
 
         try {
-          // Wait for child job to complete
-          const childJob = await clothingDetectionQueue.getJob(childJobId);
-          if (!childJob) {
-            throw new Error(`Child job ${childJobId} not found`);
-          }
-
-          // Poll child job until completion with longer timeout for complex processing
-          let attempts = 0;
-          const maxAttempts = 150; // 5 minutes (2 seconds * 150 = 300 seconds)
-          let childResult: any = null;
-
-          await job.log(
-            `⏳ Waiting for child job ${childJobId} to complete...`,
-          );
-
-          while (attempts < maxAttempts) {
-            // Refetch the job to get the latest state and data
-            const freshChildJob =
-              await clothingDetectionQueue.getJob(childJobId);
-            if (!freshChildJob) {
-              throw new Error(`Child job ${childJobId} disappeared`);
-            }
-
-            const state = await freshChildJob.getState();
-
-            if (state === "completed") {
-              // IMPORTANT: Wait a moment to ensure returnvalue is fully populated
-              await new Promise((resolve) => setTimeout(resolve, 500));
-
-              // Refetch one more time to get the complete return value
-              const finalChildJob =
-                await clothingDetectionQueue.getJob(childJobId);
-              if (!finalChildJob) {
-                throw new Error(
-                  `Child job ${childJobId} disappeared after completion`,
-                );
-              }
-
-              childResult = finalChildJob.returnvalue;
-              await job.log(
-                `📦 Child job ${childJobId} completed, got result with ${
-                  childResult?.savedApparels?.length || 0
-                } apparels`,
-              );
-              break;
-            } else if (state === "failed") {
-              const failedReason =
-                freshChildJob.failedReason || "Unknown error";
-              throw new Error(`Child job failed: ${failedReason}`);
-            } else if (state === "waiting" || state === "delayed") {
-              await job.log(
-                `⏸️  Child job ${childJobId} is waiting (attempt ${attempts + 1}/${maxAttempts})`,
-              );
-            } else if (state === "active") {
-              await job.log(
-                `🔄 Child job ${childJobId} is actively processing (attempt ${attempts + 1}/${maxAttempts})`,
-              );
-            }
-
-            // Wait 5 seconds before next check - less Redis load
-            await new Promise((resolve) => setTimeout(resolve, 5000));
-            attempts++;
-          }
-
-          if (!childResult) {
+          if (pollResult.status !== "completed" || !pollResult.data) {
             throw new Error(
-              `Child job ${childJobId} timed out after ${maxAttempts * 2} seconds`,
+              pollResult.error || `Child job ${childJobId} did not complete`,
             );
           }
+          const childResult = pollResult.data;
 
           // Validate result structure
           if (!childResult || typeof childResult !== "object") {
             throw new Error(`Child job ${childJobId} returned invalid result`);
           }
 
-          console.log(`\n📦 [BATCH] Child job ${childJobId} result structure:`);
-          console.log(`   success: ${childResult.success}`);
-          console.log(
-            `   savedApparels: ${childResult.savedApparels ? `array with ${childResult.savedApparels.length} items` : "undefined/null"}`,
-          );
-          console.log(
-            `   failedApparels: ${childResult.failedApparels ? `array with ${childResult.failedApparels.length} items` : "undefined/null"}`,
-          );
-          console.log(`   message: ${childResult.message}`);
+          if (verboseDetectionLogs) {
+            console.log(`\n📦 [BATCH] Child job ${childJobId} result structure:`);
+            console.log(`   success: ${childResult.success}`);
+            console.log(
+              `   savedApparels: ${
+                childResult.savedApparels
+                  ? `array with ${childResult.savedApparels.length} items`
+                  : "undefined/null"
+              }`,
+            );
+            console.log(
+              `   failedApparels: ${
+                childResult.failedApparels
+                  ? `array with ${childResult.failedApparels.length} items`
+                  : "undefined/null"
+              }`,
+            );
+            console.log(`   message: ${childResult.message}`);
+          }
 
           // Aggregate results
           if (childResult.success) {
@@ -487,18 +605,22 @@ const clothingDetectionBatchWorker = new Worker(
             const childImagesWithoutClothes =
               childResult.imagesWithoutClothes || [];
 
-            console.log(`📊 [BATCH] Aggregating results from image ${i + 1}:`);
-            console.log(`   Child apparels count: ${childApparels.length}`);
-            console.log(
-              `   Child apparels IDs: ${childApparels.map((a: any) => a.id).join(", ") || "none"}`,
-            );
-            console.log(`   Child failed count: ${childFailed.length}`);
-            console.log(
-              `   Child imagesWithoutClothes count: ${childImagesWithoutClothes.length}`,
-            );
-            console.log(
-              `   Current total before adding: ${allResults.savedApparels.length}`,
-            );
+            if (verboseDetectionLogs) {
+              console.log(`📊 [BATCH] Aggregating results from image ${i + 1}:`);
+              console.log(`   Child apparels count: ${childApparels.length}`);
+              console.log(
+                `   Child apparels IDs: ${
+                  childApparels.map((a: any) => a.id).join(", ") || "none"
+                }`,
+              );
+              console.log(`   Child failed count: ${childFailed.length}`);
+              console.log(
+                `   Child imagesWithoutClothes count: ${childImagesWithoutClothes.length}`,
+              );
+              console.log(
+                `   Current total before adding: ${allResults.savedApparels.length}`,
+              );
+            }
 
             await job.log(
               `📊 Aggregating results from image ${i + 1}: ${
@@ -510,9 +632,11 @@ const clothingDetectionBatchWorker = new Worker(
             allResults.failedApparels.push(...childFailed);
             allResults.imagesWithoutClothes.push(...childImagesWithoutClothes);
 
-            console.log(
-              `   Current total after adding: ${allResults.savedApparels.length}`,
-            );
+            if (verboseDetectionLogs) {
+              console.log(
+                `   Current total after adding: ${allResults.savedApparels.length}`,
+              );
+            }
 
             await job.log(
               `✅ Image ${i + 1}/${totalImages} completed: ${
@@ -554,6 +678,7 @@ const clothingDetectionBatchWorker = new Worker(
           )}%)`,
         );
       }
+      const tAggregate = Date.now() - aggregateStart;
 
       // Final verification - ensure we processed all images
       if (processedCount !== totalImages) {
@@ -570,6 +695,12 @@ const clothingDetectionBatchWorker = new Worker(
       await job.log(
         `📋 Final Summary: ${processedCount} images processed, ${allResults.savedApparels.length} items created, ${allResults.failedApparels.length} failures, ${allResults.imagesWithoutClothes.length} images without clothes`,
       );
+
+      await emitAddItemsBatchTelemetry(job, batchJobStart, {
+        createChildJobs: tCreateChildJobs,
+        waitChildren: tWaitChildren,
+        aggregate: tAggregate,
+      });
 
       return {
         success: true,

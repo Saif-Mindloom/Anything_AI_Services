@@ -218,7 +218,7 @@ export interface ClothingIsolationResult {
 
 // Initialize Google AI client
 const ai = new GoogleGenAI({
-  apiKey: "AIzaSyB_m0qCgrF1GGFXnY7DmOEXHwDtnBVEhlY", // Should be moved to env variables
+  apiKey: "AIzaSyD-dGOfFy8yS9l0LfgdK6rw8iSvudKHmik", // Should be moved to env variables
 });
 
 const model = "gemini-2.5-flash-image";

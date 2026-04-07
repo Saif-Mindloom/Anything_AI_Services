@@ -86,7 +86,13 @@ router.post(
           garmentImagePath
         );
 
-        const savedFileName = saveBase64Image(finalImage, { tryOn: true });
+        const savedFileName = saveBase64Image(finalImage, {
+          tryOn: true,
+          cleanupAfterSeconds: parseInt(
+            process.env.LOCAL_IMAGE_CLEANUP_TTL_SECONDS || "3600",
+            10
+          ),
+        });
 
         res.json({
           success: true,

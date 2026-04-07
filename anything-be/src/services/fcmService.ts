@@ -54,8 +54,13 @@ export const sendFCMNotificationMutation = async (
   args: { input: SendFCMNotificationInput },
 ) => {
   try {
-    const { token, mode, notification, data, androidPriority = "high" } =
-      args.input;
+    const {
+      token,
+      mode,
+      notification,
+      data,
+      androidPriority = "high",
+    } = args.input;
 
     const resolvedProjectId =
       process.env.FCM_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;

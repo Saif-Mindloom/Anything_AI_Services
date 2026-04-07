@@ -1,4 +1,11 @@
-import { Outfit } from "../models/outfit.model";
+import {
+  Accessory,
+  AnythingPick,
+  CalendarEntry,
+  Outfit,
+  UsedAnythingPick,
+  sequelize,
+} from "../models/index";
 import {
   addAngleGenerationJob,
   angleGenerationQueue,
@@ -12,6 +19,7 @@ import { authenticateUser } from "./helper/auth";
 import { getAccessoriesForOutfit } from "./accessoryGenerationService";
 import { removeBackgroundFromBase64 } from "./backgroundRemovalService";
 import { centerAndStandardizeImage } from "../helpers/imageUtils";
+import { deleteFileByUri, deleteFilesByPrefix } from "./gcsService";
 
 export const setOutfitVisibilityMutation = async (
   _: any,
@@ -312,6 +320,7 @@ export const getOutfitDetailsQuery = async (
         bottomId: finalBottomId,
         shoeId: outfit.shoeId,
         dressId: finalDressId,
+        outerwearId: outfit.outerwearId ?? 0,
         accessoryIds: outfit.accessoryIds || [],
         primaryImageUrl: outfit.primaryImageUrl || null,
         imageList: outfit.imageList ? JSON.stringify(outfit.imageList) : null,
@@ -443,6 +452,136 @@ export const toggleOutfitFavouriteMutation = async (
   }
 };
 
+const collectGcsUrisFromImageList = (imageList: unknown): string[] => {
+  if (imageList == null) return [];
+  if (typeof imageList === "string") {
+    try {
+      return collectGcsUrisFromImageList(JSON.parse(imageList));
+    } catch {
+      return [];
+    }
+  }
+  if (typeof imageList !== "object") return [];
+  const out: string[] = [];
+  for (const v of Object.values(imageList as Record<string, unknown>)) {
+    if (typeof v === "string") {
+      if (v.startsWith("https://storage.googleapis.com/") || v.startsWith("gs://")) {
+        out.push(v);
+      }
+    } else {
+      out.push(...collectGcsUrisFromImageList(v));
+    }
+  }
+  return out;
+};
+
+/** Best-effort GCS cleanup for one outfit (prefix wipes + known URLs). Prefix failures are logged; per-file deletes are non-fatal. */
+const deleteOutfitGcsAssets = async (
+  userId: number,
+  outfitId: number,
+  outfit: {
+    primaryImageUrl?: string | null;
+    gsUtil?: string | null;
+    poseLeft?: string | null;
+    poseRight?: string | null;
+    imageList?: unknown;
+  },
+  accessories: { imageUrl?: string | null; gsUtil?: string | null }[],
+): Promise<void> => {
+  const uid = String(userId);
+  try {
+    await deleteFilesByPrefix(`${uid}/VirtualTryOn/${outfitId}/`);
+  } catch (e) {
+    console.error(
+      `[deleteOutfit] GCS prefix VirtualTryOn/${outfitId}:`,
+      e instanceof Error ? e.message : e,
+    );
+  }
+  try {
+    await deleteFilesByPrefix(`${uid}/accessories/${outfitId}/`);
+  } catch (e) {
+    console.error(
+      `[deleteOutfit] GCS prefix accessories/${outfitId}:`,
+      e instanceof Error ? e.message : e,
+    );
+  }
+
+  const uris = new Set<string>();
+  for (const u of [
+    outfit.primaryImageUrl,
+    outfit.gsUtil,
+    outfit.poseLeft,
+    outfit.poseRight,
+  ]) {
+    if (u) uris.add(u);
+  }
+  for (const u of collectGcsUrisFromImageList(outfit.imageList)) {
+    uris.add(u);
+  }
+  for (const acc of accessories) {
+    if (acc.imageUrl) uris.add(acc.imageUrl);
+    if (acc.gsUtil) uris.add(acc.gsUtil);
+  }
+
+  await Promise.all([...uris].map((uri) => deleteFileByUri(uri)));
+};
+
+export const deleteOutfitMutation = async (
+  _: any,
+  { outfitId }: { outfitId: number },
+  context: any,
+) => {
+  try {
+    const authResult = await authenticateUser(context);
+    if (authResult.error) {
+      return { success: false, message: authResult.error };
+    }
+
+    const user = authResult.user;
+
+    const outfit = await Outfit.findOne({
+      where: { id: outfitId, userId: user.userId },
+    });
+
+    if (!outfit) {
+      return {
+        success: false,
+        message: "Outfit not found or you don't have permission to delete it",
+      };
+    }
+
+    const accessories = await Accessory.findAll({ where: { outfitId: outfit.id } });
+
+    await deleteOutfitGcsAssets(user.userId, outfit.id, outfit, accessories);
+
+    await sequelize.transaction(async (t) => {
+      await CalendarEntry.destroy({
+        where: { outfitId: outfit.id },
+        transaction: t,
+      });
+      await AnythingPick.destroy({ where: { outfitId: outfit.id }, transaction: t });
+      await UsedAnythingPick.destroy({
+        where: { outfitId: outfit.id },
+        transaction: t,
+      });
+      await Accessory.destroy({ where: { outfitId: outfit.id }, transaction: t });
+      await outfit.destroy({ transaction: t });
+    });
+
+    return {
+      success: true,
+      message: "Outfit and related data deleted successfully",
+    };
+  } catch (error) {
+    console.error("Error deleting outfit:", error);
+    return {
+      success: false,
+      message:
+        error instanceof Error ? error.message : "Failed to delete outfit",
+    };
+  }
+};
+
 export const getVisibleOutfitsQuery = async (
   _: any,
   args: any,
@@ -543,6 +682,7 @@ export const getOutfitDetailsForMCP = async (
         bottomId: outfit.bottomId,
         shoeId: outfit.shoeId,
         dressId: outfit.dressId,
+        outerwearId: outfit.outerwearId ?? 0,
         accessoryIds: outfit.accessoryIds || [],
         primaryImageUrl: outfit.primaryImageUrl || null,
         imageList: outfit.imageList ? JSON.stringify(outfit.imageList) : null,
@@ -1499,7 +1639,7 @@ ${gridDescriptions.join("\n")}
     const { GoogleGenAI, Modality } = await import("@google/genai");
     const ai = new GoogleGenAI({
       apiKey:
-        process.env.GEMINI_API_KEY || "AIzaSyB_m0qCgrF1GGFXnY7DmOEXHwDtnBVEhlY",
+        process.env.GEMINI_API_KEY || "AIzaSyD-dGOfFy8yS9l0LfgdK6rw8iSvudKHmik",
     });
 
     const maxRetries = 5;

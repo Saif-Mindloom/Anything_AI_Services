@@ -1,11 +1,14 @@
 type VirtualTryOnResponse {
   success: Boolean!
   message: String!
-  imageBase64: String
   savedFileName: String
   downloadUrl: String
   gsUri: String
   outfitId: Int
+  """BullMQ job id when work is queued; null when outfit was returned from cache (status completed, no polling)."""
+  jobId: String
+  """completed = cached outfit returned synchronously; queued = poll job status by jobId."""
+  status: String
 }
 
 extend type Mutation {

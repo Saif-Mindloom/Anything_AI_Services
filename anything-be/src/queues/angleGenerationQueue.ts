@@ -12,7 +12,7 @@ import { generateOutfitSummary } from "../services/accessoryGenerationService";
 // Initialize Google Gen AI SDK with API key (not Vertex AI)
 const ai = new GoogleGenAI({
   apiKey:
-    process.env.GEMINI_API_KEY || "AIzaSyB_m0qCgrF1GGFXnY7DmOEXHwDtnBVEhlY",
+    process.env.GEMINI_API_KEY || "AIzaSyD-dGOfFy8yS9l0LfgdK6rw8iSvudKHmik",
 });
 
 // ============================================
@@ -216,12 +216,16 @@ Image 2 is a HEAD CLOSE-UP cropped from the 0° reference — the PRIMARY overal
 - Do NOT add softness, artificial volume, or length beyond what this reference shows.
 - The head must face perfectly straight back in the output — ZERO yaw (no left/right rotation).
 - No cheek, jaw edge, nose outline, or any facial feature may be visible from behind.
-${zeroDegreeHairDetailInline ? `
+${
+  zeroDegreeHairDetailInline
+    ? `
 Image 3 is an ULTRA-TIGHT HAIR DETAIL crop from the 0° reference — the HIGHEST-PRIORITY texture reference:
 - Use Image 3 as source of truth for fine strand pattern, flyaways, fade sharpness, density, roughness, and micro texture.
 - If Image 2 and Image 3 conflict, Image 3 wins for texture detail.
 - Do NOT smooth, soften, stylize, or regularize the strand pattern seen in Image 3.
-` : ""}
+`
+    : ""
+}
 
 ABSOLUTE RULES:
 ✗ Do NOT show any face — the person must remain fully back-facing.
@@ -275,7 +279,8 @@ Return the FULL image with ONLY the head/hair region corrected — every other p
         throw new Error("Pass-2: could not parse corrected image data URL");
       }
 
-      const correctedDimensions = await getInlineImageDimensions(correctedInline);
+      const correctedDimensions =
+        await getInlineImageDimensions(correctedInline);
       if (!correctedDimensions) {
         throw new Error("Pass-2: could not read corrected image dimensions");
       }
