@@ -49,6 +49,26 @@ async function getAvailableOutfits(userId: number): Promise<Outfit[]> {
   const whereClause: any = {
     userId,
     visible: true,
+    [Op.and]: [
+      {
+        topId: {
+          [Op.not]: null,
+          [Op.ne]: 0,
+        },
+      },
+      {
+        bottomId: {
+          [Op.not]: null,
+          [Op.ne]: 0,
+        },
+      },
+      {
+        shoeId: {
+          [Op.not]: null,
+          [Op.ne]: 0,
+        },
+      },
+    ],
   };
 
   if (usedOutfitIds.length > 0) {
