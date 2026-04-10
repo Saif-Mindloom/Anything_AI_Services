@@ -132,9 +132,9 @@ services:
       - CLASSIFICATION_MODEL_VERSION_ID=1ed35c3d176f45d69d2aa7971e6ab9fe
       # JWT
       - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_change_this_in_production}
-      # Google Cloud
+      # Google Cloud — place secrets/gcp/anything-ai-main-e9c0ff901947.json on the host (see secrets/gcp/.gitkeep)
       - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-anything-ai-assets}
-      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/root/.config/gcloud/application_default_credentials.json}
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp/anything-ai-main-e9c0ff901947.json
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
       - GOOGLE_IMPERSONATE_SERVICE_ACCOUNT=${GOOGLE_IMPERSONATE_SERVICE_ACCOUNT}
@@ -159,7 +159,7 @@ services:
     ports:
       - "4000:4000"
     volumes:
-      - ~/.config/gcloud:/root/.config/gcloud:ro
+      - ./secrets/gcp/anything-ai-main-e9c0ff901947.json:/secrets/gcp/anything-ai-main-e9c0ff901947.json:ro
       - ./anything-be/generated-images:/app/generated-images
     depends_on:
       postgres:

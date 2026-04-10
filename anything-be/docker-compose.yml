@@ -78,7 +78,7 @@ services:
       REMOVEBG_API_KEY: ${REMOVEBG_API_KEY}
       # Google Cloud Storage Configuration
       GCS_BUCKET_NAME: ${GCS_BUCKET_NAME}
-      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/root/.config/gcloud/application_default_credentials.json}
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp/anything-ai-main-e9c0ff901947.json
       GOOGLE_IMPERSONATE_SERVICE_ACCOUNT: ${GOOGLE_IMPERSONATE_SERVICE_ACCOUNT}
       FCM_PROJECT_ID: ${FCM_PROJECT_ID}
       # Clarifai Configuration
@@ -115,7 +115,7 @@ services:
       - ./package.json:/app/package.json
       - ./codes:/app/codes:ro
       - ./generated-images:/app/generated-images
-      - ~/.config/gcloud:/root/.config/gcloud:ro
+      - ../secrets/gcp/anything-ai-main-e9c0ff901947.json:/secrets/gcp/anything-ai-main-e9c0ff901947.json:ro
     networks:
       - anything-network
 

@@ -50,3 +50,6 @@ temp/
 # Backend local env files
 anything-be/.env.docker
 
+# GCP service account keys (never commit)
+secrets/gcp/*.json
+
