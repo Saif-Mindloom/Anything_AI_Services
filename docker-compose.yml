@@ -37,11 +37,12 @@ services:
     environment:
       - PORT=8000
       - BIREFNET_MODEL=zhengpeng7/BiRefNet
-      - DEVICE=cpu
-      - USE_FP16=false
+      - DEVICE=${BIREFNET_DEVICE:-cuda}
+      - USE_FP16=${BIREFNET_USE_FP16:-true}
     ports:
       - "8000:8000"
     restart: unless-stopped
+    gpus: all
     healthcheck:
       test:
         [
@@ -57,14 +58,13 @@ services:
       timeout: 15s
       retries: 5
       start_period: 300s
-    # Uncomment if you have NVIDIA GPU
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   # New: LangGraph Service (MCP client embedded)
   langgraph-service:
