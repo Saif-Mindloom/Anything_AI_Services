@@ -25,7 +25,9 @@ export interface ApparelDescription {
  * Kept separate so the model can focus entirely on spatial orientation
  * without being distracted by generating other description fields.
  */
-async function detectApparelRotation(imageUrl: string): Promise<number | null> {
+export async function detectApparelRotation(
+  imageUrl: string,
+): Promise<number | null> {
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",

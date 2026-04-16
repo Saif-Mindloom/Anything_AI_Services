@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { gcsService } from "./gcsService";
 import { CroppedImage } from "./clothingDetectionCropService";
 import { removeBackgroundFromBase64 } from "./backgroundRemovalService";
+import { detectApparelRotation } from "./openai/apparelDescriptionService";
 
 // ============================================
 // Category-specific canvas sizes for standardization
@@ -637,6 +638,49 @@ async function correctImageRotation(
 }
 
 /**
+ * Rotate image by LLM-detected degrees using Sharp.
+ * Positive values rotate clockwise; negative values rotate counter-clockwise.
+ */
+async function applyLlmRotationCorrection(
+  dataUrl: string,
+  conceptName: string,
+): Promise<string> {
+  try {
+    const detectedRotationDegrees = await detectApparelRotation(dataUrl);
+
+    if (
+      typeof detectedRotationDegrees !== "number" ||
+      Math.abs(detectedRotationDegrees) < 1
+    ) {
+      console.log(
+        `   ✓ LLM rotation check: no correction needed for ${conceptName} (${detectedRotationDegrees ?? "null"}°)`,
+      );
+      return dataUrl;
+    }
+
+    console.log(
+      `   🔄 LLM rotation check: rotating ${conceptName} by ${detectedRotationDegrees}°`,
+    );
+
+    const imageBuffer = dataUrlToBuffer(dataUrl);
+    const metadata = await sharp(imageBuffer).metadata();
+    const format = metadata.format;
+    const mimeType = format === "png" ? "image/png" : "image/jpeg";
+
+    const correctedBuffer = await sharp(imageBuffer)
+      .rotate(detectedRotationDegrees, {
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .toBuffer();
+
+    return `data:${mimeType};base64,${correctedBuffer.toString("base64")}`;
+  } catch (error) {
+    console.error(`   ⚠️ LLM rotation correction failed for ${conceptName}:`, error);
+    return dataUrl;
+  }
+}
+
+/**
  * Calculate bounding box area
  */
 function calculateBoundingBoxArea(boundingBox: {
@@ -893,12 +937,23 @@ async function processSingleClothingItemDirect(
       croppedImage.conceptName,
     );
 
-    // Check and correct rotation if needed
-    console.log(`🔍 Checking orientation for ${croppedImage.conceptName}...`);
-    const rotationCorrectedImage = await correctImageRotation(
+    // Check and correct rotation if needed (heuristic pass)
+    console.log(
+      `🔍 Checking orientation (heuristic) for ${croppedImage.conceptName}...`,
+    );
+    const heuristicCorrectedImage = await correctImageRotation(
       isolatedImage,
       croppedImage.conceptName,
       isShoe,
+    );
+
+    // LLM-based rotation correction pass (applies exact detected degrees)
+    console.log(
+      `🧠 Checking orientation (LLM) for ${croppedImage.conceptName}...`,
+    );
+    const rotationCorrectedImage = await applyLlmRotationCorrection(
+      heuristicCorrectedImage,
+      croppedImage.conceptName,
     );
 
     // Apply background removal to the Gemini-generated image
