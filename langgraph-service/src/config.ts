@@ -2,6 +2,9 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+/** When true, use TLS for Postgres (required for RDS when SSL-only access is enforced). */
+const parsePostgresSsl = (): boolean => process.env.POSTGRES_SSL === "true";
+
 export const config = {
   port: parseInt(process.env.PORT || "3002"),
   nodeEnv: process.env.NODE_ENV || "development",
@@ -21,6 +24,7 @@ export const config = {
     database: process.env.POSTGRES_DB || "anything_backend",
     user: process.env.POSTGRES_USER || "postgres",
     password: process.env.POSTGRES_PASSWORD || "postgres",
+    ssl: parsePostgresSsl(),
   },
 
   // Authentication
@@ -38,3 +42,4 @@ console.log("- Port:", config.port);
 console.log("- Environment:", config.nodeEnv);
 console.log("- MCP Server Enabled:", config.mcpServerEnabled);
 console.log("- PostgreSQL:", `${config.postgres.host}:${config.postgres.port}`);
+console.log("- PostgreSQL SSL:", config.postgres.ssl);

@@ -53,6 +53,9 @@ export class DocumentIngestor {
         database: config.postgres.database,
         user: config.postgres.user,
         password: config.postgres.password,
+        ...(config.postgres.ssl
+          ? { ssl: { rejectUnauthorized: false } }
+          : {}),
       };
 
       // Create pool manually
