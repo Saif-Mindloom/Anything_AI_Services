@@ -42,6 +42,11 @@ device = None
 
 # Model configuration
 MODEL_NAME = os.getenv("BIREFNET_MODEL", "zhengpeng7/BiRefNet")
+# Pin HF snapshot to avoid surprise remote_code / weight updates (override via BIREFNET_REVISION).
+MODEL_REVISION = os.getenv(
+    "BIREFNET_REVISION",
+    "e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4",
+)
 DEVICE = os.getenv("DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
 USE_FP16 = os.getenv("USE_FP16", "true").lower() == "true"
 
@@ -60,7 +65,7 @@ def load_model():
     """Load the BiRefNet model"""
     global model, device
     
-    logger.info(f"Loading BiRefNet model: {MODEL_NAME}")
+    logger.info(f"Loading BiRefNet model: {MODEL_NAME} (revision={MODEL_REVISION})")
     logger.info(f"Device: {DEVICE}")
     logger.info(f"FP16: {USE_FP16}")
     
@@ -70,7 +75,8 @@ def load_model():
         # Load model from HuggingFace
         model = AutoModelForImageSegmentation.from_pretrained(
             MODEL_NAME,
-            trust_remote_code=True
+            revision=MODEL_REVISION,
+            trust_remote_code=True,
         )
         
         model.to(device)
@@ -101,7 +107,8 @@ async def health_check():
         "status": "healthy",
         "model_loaded": model is not None,
         "device": str(device),
-        "model_name": MODEL_NAME
+        "model_name": MODEL_NAME,
+        "model_revision": MODEL_REVISION,
     }
 
 
