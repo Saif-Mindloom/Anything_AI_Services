@@ -82,12 +82,12 @@ services:
       - MCP_SERVER_ARGS=/mcp-server/dist/index.js
       - MCP_SERVER_ENABLED=true
       - RAG_ENABLED=false
-      - POSTGRES_HOST=anythingai-postgres.cjqiuosmqhf4.ap-south-1.rds.amazonaws.com
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=anything_backend
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=e3irftAd.Y]BNK)ywyG0G!].15p1
-      - POSTGRES_SSL=true
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-anything_backend}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_SSL=${POSTGRES_SSL:-false}
       - API_KEY=${API_KEY}
       - BACKEND_GRAPHQL_URL=http://backend:4000/graphql
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
@@ -110,12 +110,12 @@ services:
       - PORT=4000
       # Database
       - DB_DIALECT=postgres
-      - DB_HOST=anythingai-postgres.cjqiuosmqhf4.ap-south-1.rds.amazonaws.com
-      - DB_PORT=5432
-      - DB_NAME=anything_backend
-      - DB_USER=postgres
-      - DB_PASSWORD=e3irftAd.Y]BNK)ywyG0G!].15p1
-      - DB_SSL=true
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-anything_backend}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSL=${DB_SSL:-false}
       # Redis
       - REDIS_HOST=redis
       - REDIS_PORT=6379
