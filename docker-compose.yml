@@ -22,6 +22,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    profiles: ["local-db"]
     ports:
       - "6379:6379"
     healthcheck:
@@ -117,8 +118,11 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       - DB_SSL=${DB_SSL:-false}
       # Redis
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_TLS=${REDIS_TLS:-false}
+      - REDIS_CLUSTER_MODE=${REDIS_CLUSTER_MODE:-false}
       # API Keys - loaded from .env file
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
@@ -166,8 +170,6 @@ services:
       - ./secrets/gcp/anything-ai-main-e9c0ff901947.json:/secrets/gcp/anything-ai-main-e9c0ff901947.json:ro
       - ./anything-be/generated-images:/app/generated-images
     depends_on:
-      redis:
-        condition: service_healthy
       birefnet-service:
         condition: service_healthy
     restart: unless-stopped
