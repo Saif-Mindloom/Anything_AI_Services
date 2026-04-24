@@ -34,9 +34,6 @@ const startServer = async (): Promise<void> => {
     // Connect to database
     await connectDB();
 
-    // Register daily scheduled-deletion background job
-    await startScheduledDeletionJob();
-
     // Create Express app
     const app = express();
 
@@ -225,6 +222,15 @@ const startServer = async (): Promise<void> => {
       console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
       console.log("✅ Backend build is running and logs are active.");
     });
+
+    // Register daily scheduled-deletion background job in background so API boot is never blocked.
+    startScheduledDeletionJob()
+      .then(() => {
+        console.log("✅ Scheduled deletion job initialized.");
+      })
+      .catch((error) => {
+        console.error("❌ Failed to initialize scheduled deletion job:", error);
+      });
   } catch (error) {
     console.error("Failed to start server:", error);
     process.exit(1);
