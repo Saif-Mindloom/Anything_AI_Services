@@ -11,14 +11,12 @@ const redisOptions = {
   maxRetriesPerRequest: null, // Important for BullMQ
   enableReadyCheck: false,
   password: redisPassword || undefined,
-  ...(redisTlsEnabled ? { tls: { servername: redisHost } } : {}),
+  ...(redisTlsEnabled ? { tls: {} } : {}),
 };
 
 // Configure Redis connection based on environment
 export const redisConnection = redisClusterModeEnabled
   ? new Redis.Cluster([{ host: redisHost, port: redisPort }], {
-      // Keep AWS ElastiCache hostnames intact for stable TLS/SNI during slot refresh.
-      dnsLookup: (address, callback) => callback(null, address),
       redisOptions,
     })
   : new Redis(redisPort, redisHost, redisOptions);
